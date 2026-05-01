@@ -1,20 +1,19 @@
 package com.doomsday.game.domain;
 
+import com.doomsday.game.agent.TurnContext;
+import com.doomsday.game.agent.TurnOrchestrator;
 import com.doomsday.game.api.ChooseOptionRequest;
 import com.doomsday.game.api.ChooseOptionResponse;
 import com.doomsday.game.api.ComebackCardRequest;
 import com.doomsday.game.api.ComebackCardResponse;
 import com.doomsday.game.api.CreateSessionRequest;
 import com.doomsday.game.api.CreateSessionResponse;
-import com.doomsday.game.api.DifficultyDeltaPayload;
 import com.doomsday.game.api.OptionPayload;
-import com.doomsday.game.api.PlotPayload;
 import com.doomsday.game.api.SessionStateResponse;
 import com.doomsday.game.api.StateDeltaPayload;
 import com.doomsday.game.api.SubmitTurnRequest;
 import com.doomsday.game.api.SubmitTurnResponse;
 import com.doomsday.game.common.ApiException;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -23,12 +22,12 @@ import org.springframework.stereotype.Service;
 @Service
 public class GameSessionService {
 
-    private static final int MAX_CAS_RETRIES = 3;
-
     private final SessionRepository sessionRepo;
+    private final TurnOrchestrator orchestrator;
 
-    public GameSessionService(SessionRepository sessionRepo) {
+    public GameSessionService(SessionRepository sessionRepo, TurnOrchestrator orchestrator) {
         this.sessionRepo = sessionRepo;
+        this.orchestrator = orchestrator;
     }
 
     public CreateSessionResponse createSession(CreateSessionRequest request) {
@@ -58,36 +57,18 @@ public class GameSessionService {
         GameSession session = loadSession(sessionId);
         ensureVersion(session, request.expectedVersion());
 
-        session.setTurn(session.getTurn() + 1);
-        session.setVersion(session.getVersion() + 1);
-
-        double[] band = session.getDifficulty().challengeBand();
-        double challengeIndex = calculateChallengeIndex(session);
-        session.setChallengeIndex(challengeIndex);
-        DifficultyDeltaPayload delta = deriveDifficultyDelta(challengeIndex, band);
-
-        int staminaCost = 6;
-        session.setStamina(Math.max(0, session.getStamina() - staminaCost));
-
-        PlotPayload plot = new PlotPayload(
-                generateNarration(request.playerInput()),
-                List.of("event_card:ev_033", "lorebook:lb_zone_7"),
-                0.84
-        );
-
-        List<OptionPayload> options = fixedOptions();
-        session.setCurrentOptions(options);
-        session.setCurrentTurn(session.getTurn());
+        // ===== P1: 责任链编排 =====
+        TurnContext ctx = orchestrator.run(sessionId, session, request.playerInput(), idempotencyKey);
+        // StateCommitAgent 已经写入 Redis（session 引用已被修改），直接组装响应
 
         SubmitTurnResponse response = new SubmitTurnResponse(
                 session.getTurn(),
                 session.getVersion(),
-                plot,
-                options,
-                delta,
-                new StateDeltaPayload(-staminaCost, 12, List.of("found_medical_trace"))
+                ctx.plot,
+                ctx.options,
+                ctx.difficultyDelta,
+                ctx.stateDelta != null ? ctx.stateDelta : new StateDeltaPayload(-6, 12, List.of())
         );
-        sessionRepo.save(session);
         sessionRepo.saveIdempotent(idemKey, response);
         return response;
     }
@@ -173,23 +154,6 @@ public class GameSessionService {
         }
     }
 
-    private List<OptionPayload> fixedOptions() {
-        List<OptionPayload> options = new ArrayList<>();
-        options.add(new OptionPayload("opt_a", "撬开储物柜，快速搜药后撤离（激进）", "HIGH", "可能获得稀有药品，但噪音显著上升"));
-        options.add(new OptionPayload("opt_b", "原地观察 30 秒，先确认是否有感染者巡逻（稳健）", "MEDIUM_LOW", "降低遭遇战概率，但推进速度略慢"));
-        options.add(new OptionPayload("opt_c", "拆解附近废铁与布料，先做简易防护（资源导向）", "MEDIUM", "短期收益一般，但可提升后续生存容错"));
-        options.add(new OptionPayload("opt_d", "沿油站后墙潜行，尝试发现隐藏入口（探索导向）", "MEDIUM_HIGH", "可能触发支线与高价值线索，也可能遭遇伏击"));
-        return options;
-    }
-
-    private String generateNarration(String playerInput) {
-        return "你压低呼吸，沿着裂开的水泥墙一步一步向前挪动，鞋底碾过玻璃碎粒时发出细微摩擦声。"
-                + "空气里混着汽油和腐败物的味道，像一层发黏的雾裹住喉咙。你刚才的决定是：" + playerInput
-                + "。昏黄光线从门缝漏进来，映出地面拖拽痕迹，尽头像通往配电间。你知道体力正在下降，"
-                + "但这里可能有能救命的药品，也可能埋着会把你拖进深渊的响动源。远处金属管道忽然轻颤，"
-                + "像有什么东西正在靠近。你必须在谨慎和速度之间做出下一步选择。";
-    }
-
     private SessionStateResponse toStateResponse(GameSession s) {
         return new SessionStateResponse(
                 s.getSessionId(),
@@ -205,25 +169,5 @@ public class GameSessionService {
         );
     }
 
-    private double calculateChallengeIndex(GameSession session) {
-        double base = switch (session.getDifficulty()) {
-            case SEEKER -> 0.45;
-            case SURVIVOR -> 0.58;
-            case HELL -> 0.72;
-        };
-        double staminaFactor = (100 - session.getStamina()) / 200.0;
-        double infectionFactor = session.getInfection() / 200.0;
-        double value = base + staminaFactor + infectionFactor;
-        return Math.max(0.1, Math.min(0.95, value));
-    }
-
-    private DifficultyDeltaPayload deriveDifficultyDelta(double index, double[] band) {
-        if (index < band[0]) {
-            return new DifficultyDeltaPayload(0.10, -0.03, 0.05, 0.00);
-        }
-        if (index > band[1]) {
-            return new DifficultyDeltaPayload(-0.08, 0.07, -0.03, 0.00);
-        }
-        return new DifficultyDeltaPayload(0.02, -0.01, 0.01, 0.00);
-    }
 }
+
