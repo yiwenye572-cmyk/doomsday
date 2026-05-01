@@ -54,6 +54,11 @@ public class RuleGuardAgent implements AgentHandler {
                     + (ctx.options == null ? 0 : ctx.options.size()));
         }
 
+        // 规则 5：剧情文本不能为空
+        if (ctx.plot == null || ctx.plot.text() == null || ctx.plot.text().isBlank()) {
+            violations.add("PLOT_EMPTY");
+        }
+
         ctx.violations = violations;
         ctx.rulesPassed = violations.isEmpty();
 

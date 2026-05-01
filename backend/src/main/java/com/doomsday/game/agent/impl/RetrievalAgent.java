@@ -56,6 +56,16 @@ public class RetrievalAgent implements AgentHandler {
                         lb.getBody(), 0.75))
                 .toList();
 
+        // 若玩家输入过长导致 ILIKE 命中率低，则按地点进行兜底召回
+        if (lorebookResults.isEmpty()) {
+            lorebookResults = lorebookRepo
+                    .findTopByKeyword(locationTag, TOP_K)
+                    .stream()
+                    .map(lb -> new RetrievedContext("lorebook", lb.getEntryId(),
+                            lb.getBody(), 0.68))
+                    .toList();
+        }
+
         ctx.retrievedContexts.addAll(eventResults);
         ctx.retrievedContexts.addAll(lorebookResults);
 

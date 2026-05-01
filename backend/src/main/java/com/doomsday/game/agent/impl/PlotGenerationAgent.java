@@ -36,7 +36,12 @@ public class PlotGenerationAgent implements AgentHandler {
         double confidence = ctx.retrievedContexts.isEmpty() ? 0.60
                 : ctx.retrievedContexts.stream().mapToDouble(RetrievedContext::score).average().orElse(0.70);
 
-        String narration = generateNarration(ctx.playerInput, ctx.session.getLocation(), ctx.intent);
+        String narration = generateNarration(
+            ctx.playerInput,
+            ctx.session.getLocation(),
+            ctx.intent,
+            ctx.rollingMemories
+        );
         ctx.plot = new PlotPayload(narration, citations, confidence);
 
         log.debug("[{}] traceId={} confidence={} citations={}",
@@ -45,13 +50,19 @@ public class PlotGenerationAgent implements AgentHandler {
         next.handle(ctx);
     }
 
-    private String generateNarration(String playerInput, String location, String intent) {
+    private String generateNarration(String playerInput, String location, String intent, List<String> rollingMemories) {
         String envDesc = switch (location) {
             case "safe_house"     -> "破旧的避难所内弥漫着汽油与铁锈的气味，窗缝透进稀薄的灰色天光";
             case "old_gas_station"-> "废弃加油站的油漆早已剥落，停滞的空气里混着腐败物与机油的腥气";
             case "subway_ruins"   -> "地铁废墟深处，远处偶尔传来金属滚动的回响，黑暗沉甸甸地压着你";
             default               -> "末日的废土上，时间似乎已经失去了意义";
         };
+
+        String memoryHint = "";
+        if (rollingMemories != null && !rollingMemories.isEmpty()) {
+            String joined = rollingMemories.stream().limit(2).reduce((a, b) -> a + "；" + b).orElse("");
+            memoryHint = "你回想起最近的行动轨迹：" + joined + "。";
+        }
 
         String actionFeedback = switch (intent) {
             case "COMBAT"        -> "你握紧了手中的武器，肌肉在绷紧的一瞬间感到一阵酸痛";
@@ -60,7 +71,7 @@ public class PlotGenerationAgent implements AgentHandler {
             default              -> "你压低呼吸，按照心中的计划一步步推进——" + playerInput;
         };
 
-        return envDesc + "。" + actionFeedback + "。"
+        return envDesc + "。" + memoryHint + actionFeedback + "。"
                 + "体内残存的体力像沙漏里最后几粒沙，在每一次呼吸间悄悄流失。"
                 + "远处有细微的响动，像是某种东西正在逼近，但你无暇顾及，"
                 + "眼前的局面已经容不下任何犹豫——你必须立刻做出选择。";

@@ -34,6 +34,9 @@ public class TurnContext {
     // ===== Retrieval Agent 输出 =====
     public List<RetrievedContext> retrievedContexts = new ArrayList<>();
 
+    // ===== L0 Rolling Memory（Redis） =====
+    public List<String> rollingMemories = new ArrayList<>();
+
     // ===== Difficulty Director Agent 输出 =====
     public DifficultyDeltaPayload difficultyDelta;
 

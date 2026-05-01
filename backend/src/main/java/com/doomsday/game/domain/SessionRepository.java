@@ -3,6 +3,8 @@ package com.doomsday.game.domain;
 import com.doomsday.game.api.SubmitTurnResponse;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.time.Duration;
+import java.util.ArrayList;
+import java.util.List;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Repository;
 
@@ -11,13 +13,16 @@ import org.springframework.stereotype.Repository;
  * Key 规则：
  *   - 会话：  game:session:{sessionId}       TTL 24h
  *   - 幂等键：game:idem:{sessionId}:{idemKey}  TTL 24h
+ *   - L0记忆：game:memory:{sessionId}        列表保留最近 N 条
  */
 @Repository
 public class SessionRepository {
 
     private static final String SESSION_PREFIX = "game:session:";
     private static final String IDEM_PREFIX = "game:idem:";
+    private static final String MEMORY_PREFIX = "game:memory:";
     private static final Duration SESSION_TTL = Duration.ofHours(24);
+    private static final int MEMORY_WINDOW = 6;
 
     private final StringRedisTemplate redis;
     private final ObjectMapper objectMapper;
@@ -71,5 +76,38 @@ public class SessionRepository {
         } catch (Exception e) {
             throw new RuntimeException("failed to deserialize idempotency entry", e);
         }
+    }
+
+    // ===== L0 Rolling Memory =====
+
+    public void appendTurnMemory(String sessionId, TurnMemory memory) {
+        try {
+            String key = MEMORY_PREFIX + sessionId;
+            String json = objectMapper.writeValueAsString(memory);
+            redis.opsForList().rightPush(key, json);
+            redis.opsForList().trim(key, -MEMORY_WINDOW, -1);
+            redis.expire(key, SESSION_TTL);
+        } catch (Exception e) {
+            throw new RuntimeException("failed to append rolling memory: " + sessionId, e);
+        }
+    }
+
+    public List<TurnMemory> findRecentTurnMemories(String sessionId, int topN) {
+        String key = MEMORY_PREFIX + sessionId;
+        long n = Math.max(1, topN);
+        List<String> raw = redis.opsForList().range(key, -n, -1);
+        if (raw == null || raw.isEmpty()) {
+            return List.of();
+        }
+
+        List<TurnMemory> parsed = new ArrayList<>(raw.size());
+        for (String json : raw) {
+            try {
+                parsed.add(objectMapper.readValue(json, TurnMemory.class));
+            } catch (Exception ignored) {
+                // 单条损坏不影响主流程
+            }
+        }
+        return parsed;
     }
 }
