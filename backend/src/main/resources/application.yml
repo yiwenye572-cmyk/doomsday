@@ -64,3 +64,16 @@ spring:
         distance-type: COSINE_DISTANCE
         index-type: IVFFLAT
 
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  endpoint:
+    health:
+      show-details: always
+
+game:
+  chaos:
+    enabled: false
+

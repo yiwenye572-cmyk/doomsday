@@ -1,7 +1,6 @@
 package com.doomsday.game.common;
 
 import java.util.Map;
-import java.util.UUID;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.MethodArgumentNotValidException;
@@ -17,6 +16,7 @@ public class GlobalExceptionHandler {
             case "BAD_REQUEST" -> HttpStatus.BAD_REQUEST;
             case "NOT_FOUND" -> HttpStatus.NOT_FOUND;
             case "CONFLICT_VERSION" -> HttpStatus.CONFLICT;
+            case "INJECTED_FAILURE" -> HttpStatus.SERVICE_UNAVAILABLE;
             default -> HttpStatus.BAD_REQUEST;
         };
 
@@ -37,6 +37,6 @@ public class GlobalExceptionHandler {
     }
 
     private String traceId() {
-        return "tr_" + UUID.randomUUID();
+        return TraceIdSupport.currentTraceId();
     }
 }

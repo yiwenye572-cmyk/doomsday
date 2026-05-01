@@ -17,6 +17,7 @@ import com.doomsday.game.domain.TurnMemory;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -68,6 +69,7 @@ public class TurnOrchestrator {
         String traceId = "trace_" + UUID.randomUUID().toString().replace("-", "").substring(0, 12);
         TurnContext ctx = new TurnContext(sessionId, session, playerInput, idempotencyKey, traceId);
         injectRollingMemory(ctx);
+        injectEpisodicSummary(ctx);
 
         log.info("[Orchestrator] START sessionId={} turn={} traceId={}", sessionId, session.getTurn() + 1, traceId);
         long t0 = System.currentTimeMillis();
@@ -107,16 +109,37 @@ public class TurnOrchestrator {
             return;
         }
 
-        List<String> memoryHints = new ArrayList<>(memories.size());
+        List<TurnContext.L0MemorySummary> memoryHints = new ArrayList<>(memories.size());
         for (TurnMemory m : memories) {
-            String hint = "第" + m.turn() + "回合: " + shorten(m.playerInput(), 20)
-                    + " => " + shorten(m.narration(), 36);
-            memoryHints.add(hint);
+            memoryHints.add(new TurnContext.L0MemorySummary(
+                    m.turn(),
+                    fallbackIntent(m.intent()),
+                    Math.max(0, m.staminaLoss()),
+                    m.rewardFlags() == null ? List.of() : m.rewardFlags(),
+                    shorten(m.narration(), 48)
+            ));
+
+            String structuredText = "T" + m.turn()
+                    + "|intent=" + fallbackIntent(m.intent())
+                    + "|loss=" + Math.max(0, m.staminaLoss())
+                    + "|gain=" + String.join(",", m.rewardFlags() == null ? List.of() : m.rewardFlags())
+                    + "|note=" + shorten(m.narration(), 56);
             ctx.retrievedContexts.add(new TurnContext.RetrievedContext(
-                    "memory_l0", "turn_" + m.turn(), m.narration(), 0.68
+                    "memory_l0", "turn_" + m.turn(), structuredText, 0.68
             ));
         }
         ctx.rollingMemories = memoryHints;
+    }
+
+    private void injectEpisodicSummary(TurnContext ctx) {
+        List<String> episodic = sessionRepo.findRecentEpisodicSummaries(ctx.sessionId, 2);
+        if (episodic.isEmpty()) {
+            return;
+        }
+        ctx.episodicSummaries = episodic;
+        episodic.forEach(summary -> ctx.retrievedContexts.add(new TurnContext.RetrievedContext(
+                "memory_l1", "episode", summary, 0.60
+        )));
     }
 
     private void appendRollingMemory(TurnContext ctx) {
@@ -126,10 +149,14 @@ public class TurnOrchestrator {
         TurnMemory memory = new TurnMemory(
                 ctx.session.getTurn(),
                 ctx.playerInput,
+            fallbackIntent(ctx.intent),
+            resolveStaminaLoss(ctx),
+            resolveRewardFlags(ctx),
                 narration,
                 Instant.now().toEpochMilli()
         );
         sessionRepo.appendTurnMemory(ctx.sessionId, memory);
+        sessionRepo.appendEpisodicSummary(ctx.sessionId, buildEpisodicSummary(ctx, narration));
     }
 
     private boolean canFallback(List<String> violations) {
@@ -165,5 +192,35 @@ public class TurnOrchestrator {
             return text;
         }
         return text.substring(0, maxLen - 1) + "…";
+    }
+
+    private String fallbackIntent(String intent) {
+        return (intent == null || intent.isBlank()) ? "FREE_EXPLORE" : intent;
+    }
+
+    private int resolveStaminaLoss(TurnContext ctx) {
+        if (ctx.stateDelta != null) {
+            return Math.max(0, -ctx.stateDelta.stamina());
+        }
+        return 0;
+    }
+
+    private List<String> resolveRewardFlags(TurnContext ctx) {
+        if (ctx.stateDelta == null || ctx.stateDelta.flagsAdded() == null) {
+            return List.of();
+        }
+        return ctx.stateDelta.flagsAdded().stream()
+                .filter(Objects::nonNull)
+                .filter(flag -> !flag.isBlank())
+                .limit(4)
+                .toList();
+    }
+
+    private String buildEpisodicSummary(TurnContext ctx, String narration) {
+        return "第" + ctx.session.getTurn()
+                + "回合: 意图=" + fallbackIntent(ctx.intent)
+                + "; 体力损耗=" + resolveStaminaLoss(ctx)
+                + "; 收益=" + (resolveRewardFlags(ctx).isEmpty() ? "无" : String.join("/", resolveRewardFlags(ctx)))
+                + "; 摘要=" + shorten(narration, 64);
     }
 }

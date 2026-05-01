@@ -35,7 +35,10 @@ public class TurnContext {
     public List<RetrievedContext> retrievedContexts = new ArrayList<>();
 
     // ===== L0 Rolling Memory（Redis） =====
-    public List<String> rollingMemories = new ArrayList<>();
+    public List<L0MemorySummary> rollingMemories = new ArrayList<>();
+
+    // ===== L1 Episodic Summary（Redis） =====
+    public List<String> episodicSummaries = new ArrayList<>();
 
     // ===== Difficulty Director Agent 输出 =====
     public DifficultyDeltaPayload difficultyDelta;
@@ -82,4 +85,13 @@ public class TurnContext {
             String text,
             double score
     ) {}
+
+        /** L0 结构化摘要（意图、损耗、收益）。 */
+        public record L0MemorySummary(
+            int turn,
+            String intent,
+            int staminaLoss,
+            List<String> rewards,
+            String narrationSnippet
+        ) {}
 }

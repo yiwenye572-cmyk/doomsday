@@ -9,7 +9,7 @@
 ### 2.1 基础信息
 - Base URL: `/api/v1`
 - Content-Type: `application/json`
-- 鉴权方式（建议）：`Authorization: Bearer <token>`
+- 鉴权方式（当前实现）：暂未启用鉴权（预留 `Authorization: Bearer <token>`）
 - 幂等请求头（关键写接口）：`Idempotency-Key: <uuid>`
 - 链路追踪头：`X-Trace-Id: <trace_id>`（可选，后端也可自动生成）
 
@@ -27,14 +27,27 @@
 ### 2.3 通用错误码
 - `OK`: 成功
 - `BAD_REQUEST`: 参数错误
-- `UNAUTHORIZED`: 未授权
-- `FORBIDDEN`: 禁止访问
 - `NOT_FOUND`: 资源不存在
 - `CONFLICT_VERSION`: 状态版本冲突（乐观锁）
-- `TOOL_CALL_FAILED`: 工具调用失败
 - `RULE_VIOLATION`: 规则约束不通过
-- `RETRY_LATER`: 下游繁忙建议重试
+- `AGENT_ABORT`: 责任链中止
+- `INJECTED_FAILURE`: 故障注入触发（仅演练环境）
 - `INTERNAL_ERROR`: 系统内部错误
+
+### 2.4 AI 返回字段说明（与前端约定）
+- `plot.citations`: 数组，元素为字符串，格式如 `event_card:ev_033` 或 `lorebook:lb_zone_7`，前端用于高亮/查看证据来源。
+- `plot.confidence`: 浮点数（0.0-1.0），表示模型置信度；低置信度时前端可展示“低置信度”提示并允许玩家复议。
+- `options`: 必须返回恰好 4 个元素（若后端降级为静态候选也应保证 4 个），前端可断言长度并做兜底处理。
+- `difficultyDelta` / `stateDelta`: 后端建议性的变更，前端仅用于展示，实际生效以 `state` 接口返回的 `version` 为准。
+
+### 2.5 故障注入（仅测试环境）
+- 开关：`game.chaos.enabled=true` 时生效。
+- 请求头：`X-Doomsday-Failpoint`
+- 支持值：
+  - `submitTurn.beforeOrchestrator`
+  - `submitTurn.afterOrchestrator`
+  - `chooseOption.beforeApply`
+  - `comeback.beforeApply`
 
 ---
 
@@ -205,7 +218,8 @@
   "newVersion": 19,
   "stateDelta": {
     "stamina": -2,
-    "riskExposure": -4
+    "noise": 0,
+    "flagsAdded": []
   }
 }
 ```
@@ -217,21 +231,9 @@
   - `fromTurn`（可选）
   - `toTurn`（可选）
 
-响应 data：
-```json
-{
-  "sessionId": "s_20260501_001",
-  "events": [
-    {
-      "turn": 27,
-      "playerInput": "...",
-      "plotSummary": "...",
-      "choice": "opt_b",
-      "version": 19,
-      "traceId": "tr_xxx"
-    }
-  ]
-}
+响应 data（当前实现）：
+```text
+"MVP阶段暂未落库回放，sessionId=s_xxx, fromTurn=..., toTurn=..."
 ```
 
 ## 3.6 触发绝境翻盘卡
@@ -264,6 +266,8 @@
 ---
 
 ## 4. 离线世界观工厂接口（管理端）
+
+> 状态：以下接口为规划项，当前后端未提供 `/api/v1/admin/**` 实现。前端联调请勿依赖。
 
 ## 4.1 提交世界观说明书
 - Method: `POST`
@@ -340,6 +344,8 @@
 ---
 
 ## 5. 可观测与运维接口（管理端）
+
+> 状态：以下管理端接口为规划项，当前可用能力为 Spring Boot Actuator（`/actuator/health`、`/actuator/metrics`）。
 
 ## 5.1 会话指标查询
 - Method: `GET`

@@ -4,3 +4,63 @@ server:
 spring:
   application:
     name: doomsday-backend
+
+  # Redis
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      timeout: 2000ms
+
+  # DataSource (PostgreSQL)
+  datasource:
+    url: jdbc:postgresql://${PG_HOST:localhost}:${PG_PORT:5432}/${PG_DB:doomsday}
+    username: ${PG_USER:doomsday}
+    password: ${PG_PASSWORD:doomsday}
+    driver-class-name: org.postgresql.Driver
+
+  # JPA
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    show-sql: false
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+
+  # Flyway
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    baseline-on-migrate: true
+
+  # ===== Spring AI Alibaba (DashScope) =====
+  ai:
+    dashscope:
+      # 从环境变量注入；本地开发可在 .env 或 IDE Run Config 中设置 DASHSCOPE_API_KEY=sk-xxx
+      api-key: ${DASHSCOPE_API_KEY:not-configured}
+      chat:
+        options:
+          # 默认主力模型（PlotGenerationAgent / OptionGenerationAgent）
+          # ⚠️ 待确认：可替换为 qwen3.6-plus 或 qwen-max
+          model: qwen-plus
+          temperature: 0.75
+          max-tokens: 1024
+      embedding:
+        options:
+          # 向量模型，1536 维 与 V1/V3 migration schema 对齐
+          # ⚠️ 待确认：可替换为 text-embedding-v4（需同步修改 dimensions）
+          model: text-embedding-v3
+
+    # ===== PgVector Store (RAG) =====
+    vectorstore:
+      pgvector:
+        # schema 由 Flyway V3 管理，关闭 Spring AI 自动建表
+        initialize-schema: false
+        schema-name: public
+        table-name: vector_store
+        # 必须与 V3 migration 的 VECTOR(1536) 维度一致
+        dimensions: 1536
+        distance-type: COSINE_DISTANCE
+        index-type: IVFFLAT
+

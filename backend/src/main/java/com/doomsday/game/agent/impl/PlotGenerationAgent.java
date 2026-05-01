@@ -103,8 +103,21 @@ public class PlotGenerationAgent implements AgentHandler {
 
         // L0 Rolling Memory
         if (!ctx.rollingMemories.isEmpty()) {
-            sb.append("【最近行动轨迹（参考，不要直接复述）】\n");
-            ctx.rollingMemories.stream().limit(3).forEach(m -> sb.append("- ").append(m).append("\n"));
+            sb.append("【最近行动轨迹（结构化摘要，参考后内化）】\n");
+            ctx.rollingMemories.stream().limit(3).forEach(m -> sb.append("- T").append(m.turn())
+                    .append(" | 意图=").append(m.intent())
+                    .append(" | 损耗=").append(m.staminaLoss())
+                    .append(" | 收益=").append(m.rewards().isEmpty() ? "无" : String.join("/", m.rewards()))
+                    .append(" | 摘要=").append(m.narrationSnippet())
+                    .append("\n"));
+            sb.append("\n");
+        }
+
+        // L1 Episodic Memory
+        if (!ctx.episodicSummaries.isEmpty()) {
+            sb.append("【中期情节记忆（避免剧情断层）】\n");
+            ctx.episodicSummaries.stream().limit(2)
+                    .forEach(m -> sb.append("- ").append(m).append("\n"));
             sb.append("\n");
         }
 

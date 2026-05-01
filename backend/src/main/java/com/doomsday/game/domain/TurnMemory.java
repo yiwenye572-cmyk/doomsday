@@ -6,6 +6,9 @@ package com.doomsday.game.domain;
 public record TurnMemory(
         int turn,
         String playerInput,
+        String intent,
+        int staminaLoss,
+        java.util.List<String> rewardFlags,
         String narration,
         long timestamp
 ) {}

@@ -1,9 +1,9 @@
 package com.doomsday.game.api;
 
 import com.doomsday.game.common.ApiResponse;
+import com.doomsday.game.common.TraceIdSupport;
 import com.doomsday.game.domain.GameSessionService;
 import jakarta.validation.Valid;
-import java.util.UUID;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -70,6 +70,6 @@ public class GameSessionController {
     }
 
     private String traceId() {
-        return "tr_" + UUID.randomUUID();
+        return TraceIdSupport.currentTraceId();
     }
 }

@@ -14,6 +14,7 @@ import com.doomsday.game.api.StateDeltaPayload;
 import com.doomsday.game.api.SubmitTurnRequest;
 import com.doomsday.game.api.SubmitTurnResponse;
 import com.doomsday.game.common.ApiException;
+import com.doomsday.game.common.FaultInjectionGuard;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -24,10 +25,14 @@ public class GameSessionService {
 
     private final SessionRepository sessionRepo;
     private final TurnOrchestrator orchestrator;
+    private final FaultInjectionGuard faultGuard;
 
-    public GameSessionService(SessionRepository sessionRepo, TurnOrchestrator orchestrator) {
+    public GameSessionService(SessionRepository sessionRepo,
+                              TurnOrchestrator orchestrator,
+                              FaultInjectionGuard faultGuard) {
         this.sessionRepo = sessionRepo;
         this.orchestrator = orchestrator;
+        this.faultGuard = faultGuard;
     }
 
     public CreateSessionResponse createSession(CreateSessionRequest request) {
@@ -56,9 +61,11 @@ public class GameSessionService {
 
         GameSession session = loadSession(sessionId);
         ensureVersion(session, request.expectedVersion());
+        faultGuard.check("submitTurn.beforeOrchestrator");
 
         // ===== P1: 责任链编排 =====
         TurnContext ctx = orchestrator.run(sessionId, session, request.playerInput(), idempotencyKey);
+        faultGuard.check("submitTurn.afterOrchestrator");
         // StateCommitAgent 已经写入 Redis（session 引用已被修改），直接组装响应
 
         SubmitTurnResponse response = new SubmitTurnResponse(
@@ -80,6 +87,7 @@ public class GameSessionService {
         if (turn != session.getCurrentTurn()) {
             throw new ApiException("BAD_REQUEST", "invalid turn");
         }
+        faultGuard.check("chooseOption.beforeApply");
 
         OptionPayload selected = session.getCurrentOptions().stream()
                 .filter(o -> o.id().equals(request.optionId()))
@@ -114,6 +122,7 @@ public class GameSessionService {
         if (session.getComebackCardRemaining() <= 0) {
             throw new ApiException("RULE_VIOLATION", "comeback card already used");
         }
+        faultGuard.check("comeback.beforeApply");
 
         boolean nearDeath = session.getHp() <= 40
                 || session.getStamina() <= 20

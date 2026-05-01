@@ -21,8 +21,10 @@ public class SessionRepository {
     private static final String SESSION_PREFIX = "game:session:";
     private static final String IDEM_PREFIX = "game:idem:";
     private static final String MEMORY_PREFIX = "game:memory:";
+    private static final String EPISODIC_PREFIX = "game:memory:l1:";
     private static final Duration SESSION_TTL = Duration.ofHours(24);
     private static final int MEMORY_WINDOW = 6;
+    private static final int EPISODIC_WINDOW = 20;
 
     private final StringRedisTemplate redis;
     private final ObjectMapper objectMapper;
@@ -109,5 +111,27 @@ public class SessionRepository {
             }
         }
         return parsed;
+    }
+
+    // ===== L1 Episodic Summary =====
+
+    public void appendEpisodicSummary(String sessionId, String summary) {
+        if (summary == null || summary.isBlank()) {
+            return;
+        }
+        String key = EPISODIC_PREFIX + sessionId;
+        redis.opsForList().rightPush(key, summary);
+        redis.opsForList().trim(key, -EPISODIC_WINDOW, -1);
+        redis.expire(key, SESSION_TTL);
+    }
+
+    public List<String> findRecentEpisodicSummaries(String sessionId, int topN) {
+        String key = EPISODIC_PREFIX + sessionId;
+        long n = Math.max(1, topN);
+        List<String> rows = redis.opsForList().range(key, -n, -1);
+        if (rows == null || rows.isEmpty()) {
+            return List.of();
+        }
+        return rows.stream().filter(s -> s != null && !s.isBlank()).toList();
     }
 }
