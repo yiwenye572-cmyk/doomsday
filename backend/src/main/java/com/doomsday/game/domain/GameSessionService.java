@@ -1,9 +1,9 @@
 package com.doomsday.game.domain;
 
-import com.doomsday.game.api.ComebackCardRequest;
-import com.doomsday.game.api.ComebackCardResponse;
 import com.doomsday.game.api.ChooseOptionRequest;
 import com.doomsday.game.api.ChooseOptionResponse;
+import com.doomsday.game.api.ComebackCardRequest;
+import com.doomsday.game.api.ComebackCardResponse;
 import com.doomsday.game.api.CreateSessionRequest;
 import com.doomsday.game.api.CreateSessionResponse;
 import com.doomsday.game.api.DifficultyDeltaPayload;
@@ -18,19 +18,23 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
 import org.springframework.stereotype.Service;
 
 @Service
 public class GameSessionService {
 
-    private final Map<String, Session> sessions = new ConcurrentHashMap<>();
-    private final Map<String, SubmitTurnResponse> idempotencyStore = new ConcurrentHashMap<>();
+    private static final int MAX_CAS_RETRIES = 3;
+
+    private final SessionRepository sessionRepo;
+
+    public GameSessionService(SessionRepository sessionRepo) {
+        this.sessionRepo = sessionRepo;
+    }
 
     public CreateSessionResponse createSession(CreateSessionRequest request) {
         String sessionId = "s_" + System.currentTimeMillis() + "_" + UUID.randomUUID().toString().substring(0, 6);
-        Session session = new Session(sessionId, request.difficulty());
-        sessions.put(sessionId, session);
+        GameSession session = GameSession.create(sessionId, request.difficulty());
+        sessionRepo.save(session);
 
         return new CreateSessionResponse(
                 sessionId,
@@ -40,112 +44,131 @@ public class GameSessionService {
     }
 
     public SessionStateResponse getState(String sessionId) {
-        Session session = getSession(sessionId);
+        GameSession session = loadSession(sessionId);
         return toStateResponse(session);
     }
 
     public SubmitTurnResponse submitTurn(String sessionId, String idempotencyKey, SubmitTurnRequest request) {
-        Session session = getSession(sessionId);
         String idemKey = sessionId + ":" + idempotencyKey;
-        SubmitTurnResponse cached = idempotencyStore.get(idemKey);
+        SubmitTurnResponse cached = sessionRepo.findIdempotent(idemKey);
         if (cached != null) {
             return cached;
         }
 
-        synchronized (session) {
-            ensureVersion(session, request.expectedVersion());
+        GameSession session = loadSession(sessionId);
+        ensureVersion(session, request.expectedVersion());
 
-            session.turn += 1;
-            session.version += 1;
+        session.setTurn(session.getTurn() + 1);
+        session.setVersion(session.getVersion() + 1);
 
-            double[] band = session.difficulty.challengeBand();
-            session.challengeIndex = calculateChallengeIndex(session);
-            DifficultyDeltaPayload delta = deriveDifficultyDelta(session.challengeIndex, band);
+        double[] band = session.getDifficulty().challengeBand();
+        double challengeIndex = calculateChallengeIndex(session);
+        session.setChallengeIndex(challengeIndex);
+        DifficultyDeltaPayload delta = deriveDifficultyDelta(challengeIndex, band);
 
-            int staminaCost = 6;
-            session.stamina = Math.max(0, session.stamina - staminaCost);
-            List<String> flagsAdded = List.of("found_medical_trace");
+        int staminaCost = 6;
+        session.setStamina(Math.max(0, session.getStamina() - staminaCost));
 
-            PlotPayload plot = new PlotPayload(
-                    generateNarration(request.playerInput()),
-                    List.of("event_card:ev_033", "lorebook:lb_zone_7"),
-                    0.84
-            );
+        PlotPayload plot = new PlotPayload(
+                generateNarration(request.playerInput()),
+                List.of("event_card:ev_033", "lorebook:lb_zone_7"),
+                0.84
+        );
 
-            List<OptionPayload> options = fixedOptions();
-            session.currentOptions = options;
-            session.currentTurn = session.turn;
+        List<OptionPayload> options = fixedOptions();
+        session.setCurrentOptions(options);
+        session.setCurrentTurn(session.getTurn());
 
-            SubmitTurnResponse response = new SubmitTurnResponse(
-                    session.turn,
-                    session.version,
-                    plot,
-                    options,
-                    delta,
-                    new StateDeltaPayload(-staminaCost, 12, flagsAdded)
-            );
-            idempotencyStore.put(idemKey, response);
-            return response;
-        }
+        SubmitTurnResponse response = new SubmitTurnResponse(
+                session.getTurn(),
+                session.getVersion(),
+                plot,
+                options,
+                delta,
+                new StateDeltaPayload(-staminaCost, 12, List.of("found_medical_trace"))
+        );
+        sessionRepo.save(session);
+        sessionRepo.saveIdempotent(idemKey, response);
+        return response;
     }
 
     public ChooseOptionResponse chooseOption(String sessionId, int turn, ChooseOptionRequest request) {
-        Session session = getSession(sessionId);
-        synchronized (session) {
-            ensureVersion(session, request.expectedVersion());
-            if (turn != session.currentTurn) {
-                throw new ApiException("BAD_REQUEST", "invalid turn");
-            }
+        GameSession session = loadSession(sessionId);
+        ensureVersion(session, request.expectedVersion());
 
-            OptionPayload selected = session.currentOptions.stream()
-                    .filter(o -> o.id().equals(request.optionId()))
-                    .findFirst()
-                    .orElseThrow(() -> new ApiException("BAD_REQUEST", "invalid optionId"));
-
-            int staminaDelta = switch (selected.id()) {
-                case "opt_a" -> -8;
-                case "opt_b" -> -2;
-                case "opt_c" -> -4;
-                case "opt_d" -> -5;
-                default -> -3;
-            };
-
-            session.stamina = Math.max(0, session.stamina + staminaDelta);
-            session.version += 1;
-
-            return new ChooseOptionResponse(
-                    turn,
-                    selected.id(),
-                    true,
-                    session.version,
-                    new StateDeltaPayload(staminaDelta, 0, List.of())
-            );
+        if (turn != session.getCurrentTurn()) {
+            throw new ApiException("BAD_REQUEST", "invalid turn");
         }
+
+        OptionPayload selected = session.getCurrentOptions().stream()
+                .filter(o -> o.id().equals(request.optionId()))
+                .findFirst()
+                .orElseThrow(() -> new ApiException("BAD_REQUEST", "invalid optionId"));
+
+        int staminaDelta = switch (selected.id()) {
+            case "opt_a" -> -8;
+            case "opt_b" -> -2;
+            case "opt_c" -> -4;
+            case "opt_d" -> -5;
+            default -> -3;
+        };
+
+        session.setStamina(Math.max(0, session.getStamina() + staminaDelta));
+        session.setVersion(session.getVersion() + 1);
+        sessionRepo.save(session);
+
+        return new ChooseOptionResponse(
+                turn,
+                selected.id(),
+                true,
+                session.getVersion(),
+                new StateDeltaPayload(staminaDelta, 0, List.of())
+        );
     }
 
     public ComebackCardResponse useComebackCard(String sessionId, ComebackCardRequest request) {
-        Session session = getSession(sessionId);
-        synchronized (session) {
-            ensureVersion(session, request.expectedVersion());
-            if (session.comebackCardRemaining <= 0) {
-                throw new ApiException("RULE_VIOLATION", "comeback card already used");
-            }
+        GameSession session = loadSession(sessionId);
+        ensureVersion(session, request.expectedVersion());
 
-            boolean nearDeath = session.hp <= 40 || session.stamina <= 20 || session.infection >= 60;
-            if (!nearDeath) {
-                throw new ApiException("RULE_VIOLATION", "comeback card can only be used in critical state");
-            }
+        if (session.getComebackCardRemaining() <= 0) {
+            throw new ApiException("RULE_VIOLATION", "comeback card already used");
+        }
 
-            session.hp = Math.min(100, session.hp + 25);
-            session.stamina = Math.min(100, session.stamina + 20);
-            session.comebackCardRemaining -= 1;
-            session.version += 1;
+        boolean nearDeath = session.getHp() <= 40
+                || session.getStamina() <= 20
+                || session.getInfection() >= 60;
+        if (!nearDeath) {
+            throw new ApiException("RULE_VIOLATION", "comeback card can only be used in critical state");
+        }
 
-            return new ComebackCardResponse(
-                    true,
-                    session.version,
-                    Map.of("hp", "+25", "stamina", "+20", "buff", "panic_resist_3_turns"),
-                    session.comebackCardRemaining
+        session.setHp(Math.min(100, session.getHp() + 25));
+        session.setStamina(Math.min(100, session.getStamina() + 20));
+        session.setComebackCardRemaining(session.getComebackCardRemaining() - 1);
+        session.setVersion(session.getVersion() + 1);
+        sessionRepo.save(session);
+
+        return new ComebackCardResponse(
+                true,
+                session.getVersion(),
+                Map.of("hp", "+25", "stamina", "+20", "buff", "panic_resist_3_turns"),
+                session.getComebackCardRemaining()
+        );
+    }
+
+    private GameSession loadSession(String sessionId) {
+        GameSession session = sessionRepo.findById(sessionId);
+        if (session == null) {
+            throw new ApiException("NOT_FOUND", "session not found");
+        }
+        return session;
+    }
+
+    private void ensureVersion(GameSession session, long expectedVersion) {
+        if (expectedVersion != session.getVersion()) {
+            throw new ApiException(
+                    "CONFLICT_VERSION",
+                    "state version mismatch",
+                    Map.of("expectedVersion", expectedVersion, "actualVersion", session.getVersion())
             );
         }
     }
@@ -167,47 +190,29 @@ public class GameSessionService {
                 + "像有什么东西正在靠近。你必须在谨慎和速度之间做出下一步选择。";
     }
 
-    private SessionStateResponse toStateResponse(Session s) {
+    private SessionStateResponse toStateResponse(GameSession s) {
         return new SessionStateResponse(
-                s.sessionId,
-                s.version,
-                s.hp,
-                s.stamina,
-                s.infection,
-                s.location,
-                List.copyOf(s.inventory),
-                s.challengeIndex,
-                s.difficulty.challengeBand(),
-                s.turn
+                s.getSessionId(),
+                s.getVersion(),
+                s.getHp(),
+                s.getStamina(),
+                s.getInfection(),
+                s.getLocation(),
+                List.copyOf(s.getInventory()),
+                s.getChallengeIndex(),
+                s.getDifficulty().challengeBand(),
+                s.getTurn()
         );
     }
 
-    private void ensureVersion(Session session, long expectedVersion) {
-        if (expectedVersion != session.version) {
-            throw new ApiException(
-                    "CONFLICT_VERSION",
-                    "state version mismatch",
-                    Map.of("expectedVersion", expectedVersion, "actualVersion", session.version)
-            );
-        }
-    }
-
-    private Session getSession(String sessionId) {
-        Session session = sessions.get(sessionId);
-        if (session == null) {
-            throw new ApiException("NOT_FOUND", "session not found");
-        }
-        return session;
-    }
-
-    private double calculateChallengeIndex(Session session) {
-        double base = switch (session.difficulty) {
+    private double calculateChallengeIndex(GameSession session) {
+        double base = switch (session.getDifficulty()) {
             case SEEKER -> 0.45;
             case SURVIVOR -> 0.58;
             case HELL -> 0.72;
         };
-        double staminaFactor = (100 - session.stamina) / 200.0;
-        double infectionFactor = session.infection / 200.0;
+        double staminaFactor = (100 - session.getStamina()) / 200.0;
+        double infectionFactor = session.getInfection() / 200.0;
         double value = base + staminaFactor + infectionFactor;
         return Math.max(0.1, Math.min(0.95, value));
     }
@@ -220,26 +225,5 @@ public class GameSessionService {
             return new DifficultyDeltaPayload(-0.08, 0.07, -0.03, 0.00);
         }
         return new DifficultyDeltaPayload(0.02, -0.01, 0.01, 0.00);
-    }
-
-    private static class Session {
-        private final String sessionId;
-        private final Difficulty difficulty;
-        private long version = 1;
-        private int turn = 0;
-        private int currentTurn = 0;
-        private int hp = 100;
-        private int stamina = 100;
-        private int infection = 0;
-        private String location = "safe_house";
-        private List<String> inventory = new ArrayList<>(List.of("knife", "bandage"));
-        private int comebackCardRemaining = 1;
-        private double challengeIndex = 0.5;
-        private List<OptionPayload> currentOptions = new ArrayList<>();
-
-        private Session(String sessionId, Difficulty difficulty) {
-            this.sessionId = sessionId;
-            this.difficulty = difficulty;
-        }
     }
 }
