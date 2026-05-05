@@ -3,6 +3,7 @@ package com.doomsday.game.agent.impl;
 import com.doomsday.game.agent.AgentChain;
 import com.doomsday.game.agent.AgentHandler;
 import com.doomsday.game.agent.TurnContext;
+import com.doomsday.game.common.LlmTokenEstimator;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.ai.chat.client.ChatClient;
@@ -39,9 +40,17 @@ public class RouterAgent implements AgentHandler {
     @Override
     public void handle(TurnContext ctx, AgentChain next) {
         try {
-            RouterOutput result = classifyWithLlm(ctx.playerInput, ctx.session.getLocation());
+            String prompt = buildClassifyPrompt(ctx.playerInput, ctx.session.getLocation());
+            long llmStart = System.nanoTime();
+            RouterOutput result = classifyWithLlm(prompt);
+            long modelMs = (System.nanoTime() - llmStart) / 1_000_000;
             ctx.intent = normalizeIntent(result.intent());
             ctx.intentConfidence = clamp(result.confidence(), 0.0, 1.0);
+            String outputSnapshot = "{\"intent\":\"" + ctx.intent + "\",\"confidence\":" + ctx.intentConfidence + "}";
+            int promptTokens = LlmTokenEstimator.estimatePromptTokens(prompt);
+            int completionTokens = LlmTokenEstimator.estimateCompletionTokens(outputSnapshot);
+            int totalTokens = promptTokens + completionTokens;
+            ctx.addLlmMetric(name(), modelMs, promptTokens, completionTokens, totalTokens, "qwen-turbo");
             log.debug("[{}] traceId={} intent={} confidence={} (llm)",
                     name(), ctx.traceId, ctx.intent, ctx.intentConfidence);
         } catch (Exception e) {
@@ -54,8 +63,8 @@ public class RouterAgent implements AgentHandler {
 
     // ===== LLM 分类 =====
 
-    private RouterOutput classifyWithLlm(String playerInput, String location) {
-        String prompt = """
+    private String buildClassifyPrompt(String playerInput, String location) {
+        return """
                 你是一个游戏意图分类器，只返回 JSON，不要代码块或多余文字。
                 
                 玩家输入：%s
@@ -70,7 +79,9 @@ public class RouterAgent implements AgentHandler {
                 返回格式（严格 JSON）：
                 {"intent":"COMBAT","confidence":0.92}
                 """.formatted(playerInput, location);
+            }
 
+            private RouterOutput classifyWithLlm(String prompt) {
         return chatClient.prompt()
                 .user(prompt)
                 .call()

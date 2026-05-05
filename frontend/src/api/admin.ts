@@ -7,6 +7,12 @@ export interface AgentMetricsSummary {
   successCalls: number;
   failCalls: number;
   avgMs: number;
+  avgQueueWaitMs: number;
+  avgModelMs: number;
+  avgPostProcessMs: number;
+  avgPromptTokens: number;
+  avgCompletionTokens: number;
+  avgTokens: number;
   successRate: number;
 }
 
@@ -15,6 +21,14 @@ export interface AgentSpan {
   elapsedMs: number;
   status: string;
   errorMessage: string | null;
+  queueWaitMs?: number;
+  modelMs?: number;
+  postProcessMs?: number;
+  promptTokens?: number;
+  completionTokens?: number;
+  totalTokens?: number;
+  tokensPerSecond?: number;
+  modelName?: string;
 }
 
 export interface TraceDetail {

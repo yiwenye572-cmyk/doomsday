@@ -5,6 +5,7 @@ import com.doomsday.game.agent.AgentHandler;
 import com.doomsday.game.agent.TurnContext;
 import com.doomsday.game.agent.TurnContext.RetrievedContext;
 import com.doomsday.game.api.PlotPayload;
+import com.doomsday.game.common.LlmTokenEstimator;
 import com.doomsday.game.domain.GameSession;
 import java.util.List;
 import java.util.stream.Collectors;
@@ -82,11 +83,18 @@ public class PlotGenerationAgent implements AgentHandler {
 
     private String generateWithLlm(TurnContext ctx) {
         String userPrompt = buildUserPrompt(ctx);
-        return chatClient.prompt()
+        long llmStart = System.nanoTime();
+        String output = chatClient.prompt()
                 .system(SYSTEM_PROMPT)
                 .user(userPrompt)
                 .call()
                 .content();
+        long modelMs = (System.nanoTime() - llmStart) / 1_000_000;
+        int promptTokens = LlmTokenEstimator.estimatePromptTokens(SYSTEM_PROMPT + "\n" + userPrompt);
+        int completionTokens = LlmTokenEstimator.estimateCompletionTokens(output);
+        int totalTokens = promptTokens + completionTokens;
+        ctx.addLlmMetric(name(), modelMs, promptTokens, completionTokens, totalTokens, "qwen-plus");
+        return output;
     }
 
     private String buildUserPrompt(TurnContext ctx) {

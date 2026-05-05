@@ -4,6 +4,7 @@ import com.doomsday.game.agent.AgentChain;
 import com.doomsday.game.agent.AgentHandler;
 import com.doomsday.game.agent.TurnContext;
 import com.doomsday.game.api.OptionPayload;
+import com.doomsday.game.common.LlmTokenEstimator;
 import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -89,11 +90,22 @@ public class OptionGenerationAgent implements AgentHandler {
                 ctx.session.getInfection()
         );
 
-        return chatClient.prompt()
+            long llmStart = System.nanoTime();
+            OptionsWrapper wrapper = chatClient.prompt()
                 .system(SYSTEM_PROMPT)
                 .user(userPrompt)
                 .call()
                 .entity(OptionsWrapper.class);
+            long modelMs = (System.nanoTime() - llmStart) / 1_000_000;
+
+            String outputSnapshot = wrapper == null || wrapper.options() == null
+                ? "{}"
+                : "{\"options\":" + wrapper.options().size() + "}";
+            int promptTokens = LlmTokenEstimator.estimatePromptTokens(SYSTEM_PROMPT + "\n" + userPrompt);
+            int completionTokens = LlmTokenEstimator.estimateCompletionTokens(outputSnapshot);
+            int totalTokens = promptTokens + completionTokens;
+            ctx.addLlmMetric(name(), modelMs, promptTokens, completionTokens, totalTokens, "qwen-plus");
+            return wrapper;
     }
 
     // ===== 静态降级 =====

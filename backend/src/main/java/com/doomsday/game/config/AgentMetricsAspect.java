@@ -30,29 +30,139 @@ public class AgentMetricsAspect {
     public Object aroundAgentHandle(ProceedingJoinPoint pjp) throws Throwable {
         String agent = pjp.getTarget().getClass().getSimpleName();
         long startedAt = System.nanoTime();
-        long startedAtMs = System.currentTimeMillis();
         // 尝试从参数中提取 TurnContext 以记录 span
         TurnContext ctx = extractContext(pjp);
+        long queueWaitMs = 0;
+        if (ctx != null) {
+            Object previousDoneNs = ctx.extras.get("metrics.previousAgentDoneNs");
+            if (previousDoneNs instanceof Long ns) {
+                queueWaitMs = Math.max(0, (startedAt - ns) / 1_000_000);
+            }
+        }
         try {
             Object ret = pjp.proceed();
-            long elapsedMs = (System.nanoTime() - startedAt) / 1_000_000;
-            record(agent, "success", startedAt);
-            metricsStore.recordAgentCall(agent, elapsedMs, true);
+            long doneAt = System.nanoTime();
+            long elapsedMs = (doneAt - startedAt) / 1_000_000;
+            long modelMs = 0;
+            int promptTokens = 0;
+            int completionTokens = 0;
+            int totalTokens = 0;
+            String modelName = null;
             if (ctx != null) {
-                ctx.agentSpans.add(new AgentMetricsStore.AgentSpan(agent, elapsedMs, "success", null));
+                TurnContext.LlmMetricAgg llm = ctx.llmMetric(agent);
+                if (llm != null) {
+                    modelMs = llm.modelMs;
+                    promptTokens = llm.promptTokens;
+                    completionTokens = llm.completionTokens;
+                    totalTokens = llm.totalTokens;
+                    modelName = llm.modelName;
+                }
+                ctx.extras.put("metrics.previousAgentDoneNs", doneAt);
             }
-            log.info("[AgentMetrics] agent={} status=success elapsed={}ms traceId={}",
-                    agent, elapsedMs, ctx != null ? ctx.traceId : "-");
+            long postProcessMs = Math.max(0, elapsedMs - modelMs);
+            double tokensPerSecond = modelMs > 0 ? totalTokens * 1000.0 / modelMs : 0.0;
+
+            record(agent, "success", startedAt);
+            recordStage(agent, "queue_wait", queueWaitMs);
+            recordStage(agent, "model", modelMs);
+            recordStage(agent, "post_process", postProcessMs);
+            meterRegistry.counter("doomsday.agent.llm.tokens", "agent", agent, "type", "prompt")
+                    .increment(promptTokens);
+            meterRegistry.counter("doomsday.agent.llm.tokens", "agent", agent, "type", "completion")
+                    .increment(completionTokens);
+
+            metricsStore.recordAgentCall(
+                    agent,
+                    elapsedMs,
+                    queueWaitMs,
+                    modelMs,
+                    postProcessMs,
+                    promptTokens,
+                    completionTokens,
+                    totalTokens,
+                    true
+            );
+            if (ctx != null) {
+                ctx.agentSpans.add(new AgentMetricsStore.AgentSpan(
+                        agent,
+                        elapsedMs,
+                        "success",
+                        null,
+                        queueWaitMs,
+                        modelMs,
+                        postProcessMs,
+                        promptTokens,
+                        completionTokens,
+                        totalTokens,
+                        tokensPerSecond,
+                        modelName
+                ));
+            }
+            log.info("[AgentMetrics] agent={} status=success elapsed={}ms queue={}ms model={}ms post={}ms tokens={} tps={} traceId={}",
+                    agent, elapsedMs, queueWaitMs, modelMs, postProcessMs, totalTokens,
+                    String.format("%.2f", tokensPerSecond), ctx != null ? ctx.traceId : "-");
             return ret;
         } catch (Throwable ex) {
-            long elapsedMs = (System.nanoTime() - startedAt) / 1_000_000;
-            record(agent, "error", startedAt);
-            metricsStore.recordAgentCall(agent, elapsedMs, false);
+            long doneAt = System.nanoTime();
+            long elapsedMs = (doneAt - startedAt) / 1_000_000;
+            long modelMs = 0;
+            int promptTokens = 0;
+            int completionTokens = 0;
+            int totalTokens = 0;
+            String modelName = null;
             if (ctx != null) {
-                ctx.agentSpans.add(new AgentMetricsStore.AgentSpan(agent, elapsedMs, "error", ex.getMessage()));
+                TurnContext.LlmMetricAgg llm = ctx.llmMetric(agent);
+                if (llm != null) {
+                    modelMs = llm.modelMs;
+                    promptTokens = llm.promptTokens;
+                    completionTokens = llm.completionTokens;
+                    totalTokens = llm.totalTokens;
+                    modelName = llm.modelName;
+                }
+                ctx.extras.put("metrics.previousAgentDoneNs", doneAt);
             }
-            log.warn("[AgentMetrics] agent={} status=error elapsed={}ms traceId={} message={}",
-                    agent, elapsedMs, ctx != null ? ctx.traceId : "-", ex.getMessage());
+            long postProcessMs = Math.max(0, elapsedMs - modelMs);
+            double tokensPerSecond = modelMs > 0 ? totalTokens * 1000.0 / modelMs : 0.0;
+
+            record(agent, "error", startedAt);
+            recordStage(agent, "queue_wait", queueWaitMs);
+            recordStage(agent, "model", modelMs);
+            recordStage(agent, "post_process", postProcessMs);
+            meterRegistry.counter("doomsday.agent.llm.tokens", "agent", agent, "type", "prompt")
+                    .increment(promptTokens);
+            meterRegistry.counter("doomsday.agent.llm.tokens", "agent", agent, "type", "completion")
+                    .increment(completionTokens);
+
+            metricsStore.recordAgentCall(
+                    agent,
+                    elapsedMs,
+                    queueWaitMs,
+                    modelMs,
+                    postProcessMs,
+                    promptTokens,
+                    completionTokens,
+                    totalTokens,
+                    false
+            );
+            if (ctx != null) {
+                ctx.agentSpans.add(new AgentMetricsStore.AgentSpan(
+                        agent,
+                        elapsedMs,
+                        "error",
+                        ex.getMessage(),
+                        queueWaitMs,
+                        modelMs,
+                        postProcessMs,
+                        promptTokens,
+                        completionTokens,
+                        totalTokens,
+                        tokensPerSecond,
+                        modelName
+                ));
+            }
+            log.warn("[AgentMetrics] agent={} status=error elapsed={}ms queue={}ms model={}ms post={}ms tokens={} tps={} traceId={} message={}",
+                    agent, elapsedMs, queueWaitMs, modelMs, postProcessMs, totalTokens,
+                    String.format("%.2f", tokensPerSecond), ctx != null ? ctx.traceId : "-", ex.getMessage());
             throw ex;
         }
     }
@@ -64,6 +174,14 @@ public class AgentMetricsAspect {
                 .tag("status", status)
                 .register(meterRegistry)
                 .record(elapsed, TimeUnit.NANOSECONDS);
+    }
+
+    private void recordStage(String agent, String stage, long elapsedMs) {
+        Timer.builder("doomsday.agent.stage.latency")
+                .tag("agent", agent)
+                .tag("stage", stage)
+                .register(meterRegistry)
+                .record(Math.max(0, elapsedMs), TimeUnit.MILLISECONDS);
     }
 
     private TurnContext extractContext(ProceedingJoinPoint pjp) {

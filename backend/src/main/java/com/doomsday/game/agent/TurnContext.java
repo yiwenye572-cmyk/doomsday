@@ -68,6 +68,9 @@ public class TurnContext {
     // ===== 可观测性：AOP 切面写入各 Agent 分段耗时 =====
     public List<AgentMetricsStore.AgentSpan> agentSpans = new ArrayList<>();
 
+    // ===== 可观测性：LLM 分段与 Token 统计（由 Agent 内部写入） =====
+    public final Map<String, LlmMetricAgg> llmMetrics = new HashMap<>();
+
     public TurnContext(String sessionId, GameSession session,
                        String playerInput, String idempotencyKey, String traceId) {
         this.sessionId = sessionId;
@@ -80,6 +83,34 @@ public class TurnContext {
     public void abort(String reason) {
         this.aborted = true;
         this.abortReason = reason;
+    }
+
+    /**
+     * 聚合单个 Agent 内部的 LLM 调用指标。
+     * 允许同一 Agent 多次调用模型，最终在切面层统一汇总。
+     */
+    public void addLlmMetric(String agentName,
+                             long modelMs,
+                             int promptTokens,
+                             int completionTokens,
+                             int totalTokens,
+                             String modelName) {
+        if (agentName == null || agentName.isBlank()) {
+            return;
+        }
+        LlmMetricAgg agg = llmMetrics.computeIfAbsent(agentName, ignored -> new LlmMetricAgg());
+        agg.modelMs += Math.max(0, modelMs);
+        agg.promptTokens += Math.max(0, promptTokens);
+        agg.completionTokens += Math.max(0, completionTokens);
+        agg.totalTokens += Math.max(0, totalTokens);
+        agg.calls += 1;
+        if (modelName != null && !modelName.isBlank()) {
+            agg.modelName = modelName;
+        }
+    }
+
+    public LlmMetricAgg llmMetric(String agentName) {
+        return llmMetrics.get(agentName);
     }
 
     /** 检索结果条目 */
@@ -98,4 +129,13 @@ public class TurnContext {
             List<String> rewards,
             String narrationSnippet
         ) {}
+
+    public static class LlmMetricAgg {
+        public long modelMs;
+        public int promptTokens;
+        public int completionTokens;
+        public int totalTokens;
+        public int calls;
+        public String modelName;
+    }
 }

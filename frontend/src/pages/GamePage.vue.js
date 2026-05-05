@@ -1,0 +1,279 @@
+import { computed, onMounted, ref } from "vue";
+import { useRoute, useRouter } from "vue-router";
+import { chooseOption, getSessionState, submitTurn, useComebackCard } from "../api/game";
+import ActionInput from "../components/game/ActionInput.vue";
+import NarrativePanel from "../components/game/NarrativePanel.vue";
+import OptionsGrid from "../components/game/OptionsGrid.vue";
+import StatusPanel from "../components/game/StatusPanel.vue";
+const route = useRoute();
+const router = useRouter();
+const sessionId = computed(() => String(route.params.sessionId || ""));
+const state = ref(null);
+const plot = ref(null);
+const options = ref([]);
+const loading = ref(false);
+const pendingAction = ref(false);
+const notice = ref("");
+const headline = computed(() => `会话 ${sessionId.value}`);
+async function refreshState() {
+    if (!sessionId.value) {
+        return;
+    }
+    state.value = await getSessionState(sessionId.value);
+}
+async function handleSubmit(input) {
+    if (!state.value || pendingAction.value) {
+        return;
+    }
+    pendingAction.value = true;
+    notice.value = "";
+    try {
+        const data = await submitTurn(sessionId.value, {
+            expectedVersion: state.value.version,
+            playerInput: input,
+            clientTime: Date.now(),
+        });
+        plot.value = data.plot;
+        options.value = data.options;
+        await refreshState();
+    }
+    catch (e) {
+        await handleError(e);
+    }
+    finally {
+        pendingAction.value = false;
+    }
+}
+async function handleChoose(optionId) {
+    if (!state.value || pendingAction.value) {
+        return;
+    }
+    pendingAction.value = true;
+    notice.value = "";
+    try {
+        const turn = state.value.turn;
+        await chooseOption(sessionId.value, turn, {
+            expectedVersion: state.value.version,
+            optionId,
+        });
+        await refreshState();
+    }
+    catch (e) {
+        await handleError(e);
+    }
+    finally {
+        pendingAction.value = false;
+    }
+}
+async function handleComeback() {
+    if (!state.value || pendingAction.value) {
+        return;
+    }
+    pendingAction.value = true;
+    notice.value = "";
+    try {
+        const result = await useComebackCard(sessionId.value, {
+            expectedVersion: state.value.version,
+        });
+        notice.value = result.applied ? "翻盘卡已生效" : "翻盘卡未生效";
+        await refreshState();
+    }
+    catch (e) {
+        await handleError(e);
+    }
+    finally {
+        pendingAction.value = false;
+    }
+}
+async function handleError(error) {
+    const message = error instanceof Error ? error.message : "请求失败";
+    notice.value = message;
+    if (message.toLowerCase().includes("version")) {
+        await refreshState();
+    }
+}
+async function init() {
+    loading.value = true;
+    notice.value = "";
+    try {
+        await refreshState();
+    }
+    catch (e) {
+        notice.value = e instanceof Error ? e.message : "状态加载失败";
+    }
+    finally {
+        loading.value = false;
+    }
+}
+function goReplay() {
+    router.push(`/replay/${sessionId.value}`);
+}
+onMounted(init);
+debugger; /* PartiallyEnd: #3632/scriptSetup.vue */
+const __VLS_ctx = {};
+let __VLS_components;
+let __VLS_directives;
+/** @type {__VLS_StyleScopedClasses['notice']} */ ;
+/** @type {__VLS_StyleScopedClasses['layout']} */ ;
+/** @type {__VLS_StyleScopedClasses['topbar']} */ ;
+// CSS variable injection 
+// CSS variable injection end 
+__VLS_asFunctionalElement(__VLS_intrinsicElements.main, __VLS_intrinsicElements.main)({
+    ...{ class: "page-wrap game-page" },
+});
+__VLS_asFunctionalElement(__VLS_intrinsicElements.header, __VLS_intrinsicElements.header)({
+    ...{ class: "panel topbar" },
+});
+__VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({});
+__VLS_asFunctionalElement(__VLS_intrinsicElements.p, __VLS_intrinsicElements.p)({
+    ...{ class: "meta" },
+});
+__VLS_asFunctionalElement(__VLS_intrinsicElements.h1, __VLS_intrinsicElements.h1)({});
+(__VLS_ctx.headline);
+__VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
+    ...{ class: "top-actions" },
+});
+__VLS_asFunctionalElement(__VLS_intrinsicElements.button, __VLS_intrinsicElements.button)({
+    ...{ onClick: (...[$event]) => {
+            __VLS_ctx.router.push('/');
+        } },
+    ...{ class: "btn" },
+});
+__VLS_asFunctionalElement(__VLS_intrinsicElements.button, __VLS_intrinsicElements.button)({
+    ...{ onClick: (__VLS_ctx.goReplay) },
+    ...{ class: "btn" },
+});
+__VLS_asFunctionalElement(__VLS_intrinsicElements.button, __VLS_intrinsicElements.button)({
+    ...{ onClick: (...[$event]) => {
+            __VLS_ctx.router.push('/admin');
+        } },
+    ...{ class: "btn btn--admin" },
+});
+if (!__VLS_ctx.loading) {
+    __VLS_asFunctionalElement(__VLS_intrinsicElements.section, __VLS_intrinsicElements.section)({
+        ...{ class: "layout" },
+    });
+    __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
+        ...{ class: "main-col" },
+    });
+    /** @type {[typeof NarrativePanel, ]} */ ;
+    // @ts-ignore
+    const __VLS_0 = __VLS_asFunctionalComponent(NarrativePanel, new NarrativePanel({
+        plot: (__VLS_ctx.plot),
+    }));
+    const __VLS_1 = __VLS_0({
+        plot: (__VLS_ctx.plot),
+    }, ...__VLS_functionalComponentArgsRest(__VLS_0));
+    /** @type {[typeof ActionInput, ]} */ ;
+    // @ts-ignore
+    const __VLS_3 = __VLS_asFunctionalComponent(ActionInput, new ActionInput({
+        ...{ 'onSubmit': {} },
+        ...{ 'onComeback': {} },
+        loading: (__VLS_ctx.pendingAction),
+    }));
+    const __VLS_4 = __VLS_3({
+        ...{ 'onSubmit': {} },
+        ...{ 'onComeback': {} },
+        loading: (__VLS_ctx.pendingAction),
+    }, ...__VLS_functionalComponentArgsRest(__VLS_3));
+    let __VLS_6;
+    let __VLS_7;
+    let __VLS_8;
+    const __VLS_9 = {
+        onSubmit: (__VLS_ctx.handleSubmit)
+    };
+    const __VLS_10 = {
+        onComeback: (__VLS_ctx.handleComeback)
+    };
+    var __VLS_5;
+    /** @type {[typeof OptionsGrid, ]} */ ;
+    // @ts-ignore
+    const __VLS_11 = __VLS_asFunctionalComponent(OptionsGrid, new OptionsGrid({
+        ...{ 'onChoose': {} },
+        options: (__VLS_ctx.options),
+        loading: (__VLS_ctx.pendingAction),
+    }));
+    const __VLS_12 = __VLS_11({
+        ...{ 'onChoose': {} },
+        options: (__VLS_ctx.options),
+        loading: (__VLS_ctx.pendingAction),
+    }, ...__VLS_functionalComponentArgsRest(__VLS_11));
+    let __VLS_14;
+    let __VLS_15;
+    let __VLS_16;
+    const __VLS_17 = {
+        onChoose: (__VLS_ctx.handleChoose)
+    };
+    var __VLS_13;
+    /** @type {[typeof StatusPanel, ]} */ ;
+    // @ts-ignore
+    const __VLS_18 = __VLS_asFunctionalComponent(StatusPanel, new StatusPanel({
+        state: (__VLS_ctx.state),
+    }));
+    const __VLS_19 = __VLS_18({
+        state: (__VLS_ctx.state),
+    }, ...__VLS_functionalComponentArgsRest(__VLS_18));
+}
+else {
+    __VLS_asFunctionalElement(__VLS_intrinsicElements.section, __VLS_intrinsicElements.section)({
+        ...{ class: "panel loading-box" },
+    });
+}
+if (__VLS_ctx.pendingAction && !__VLS_ctx.notice) {
+    __VLS_asFunctionalElement(__VLS_intrinsicElements.p, __VLS_intrinsicElements.p)({
+        ...{ class: "notice processing" },
+    });
+}
+if (__VLS_ctx.notice) {
+    __VLS_asFunctionalElement(__VLS_intrinsicElements.p, __VLS_intrinsicElements.p)({
+        ...{ class: "notice" },
+    });
+    (__VLS_ctx.notice);
+}
+/** @type {__VLS_StyleScopedClasses['page-wrap']} */ ;
+/** @type {__VLS_StyleScopedClasses['game-page']} */ ;
+/** @type {__VLS_StyleScopedClasses['panel']} */ ;
+/** @type {__VLS_StyleScopedClasses['topbar']} */ ;
+/** @type {__VLS_StyleScopedClasses['meta']} */ ;
+/** @type {__VLS_StyleScopedClasses['top-actions']} */ ;
+/** @type {__VLS_StyleScopedClasses['btn']} */ ;
+/** @type {__VLS_StyleScopedClasses['btn']} */ ;
+/** @type {__VLS_StyleScopedClasses['btn']} */ ;
+/** @type {__VLS_StyleScopedClasses['btn--admin']} */ ;
+/** @type {__VLS_StyleScopedClasses['layout']} */ ;
+/** @type {__VLS_StyleScopedClasses['main-col']} */ ;
+/** @type {__VLS_StyleScopedClasses['panel']} */ ;
+/** @type {__VLS_StyleScopedClasses['loading-box']} */ ;
+/** @type {__VLS_StyleScopedClasses['notice']} */ ;
+/** @type {__VLS_StyleScopedClasses['processing']} */ ;
+/** @type {__VLS_StyleScopedClasses['notice']} */ ;
+var __VLS_dollars;
+const __VLS_self = (await import('vue')).defineComponent({
+    setup() {
+        return {
+            ActionInput: ActionInput,
+            NarrativePanel: NarrativePanel,
+            OptionsGrid: OptionsGrid,
+            StatusPanel: StatusPanel,
+            router: router,
+            state: state,
+            plot: plot,
+            options: options,
+            loading: loading,
+            pendingAction: pendingAction,
+            notice: notice,
+            headline: headline,
+            handleSubmit: handleSubmit,
+            handleChoose: handleChoose,
+            handleComeback: handleComeback,
+            goReplay: goReplay,
+        };
+    },
+});
+export default (await import('vue')).defineComponent({
+    setup() {
+        return {};
+    },
+});
+; /* PartiallyEnd: #4569/main.vue */
+//# sourceMappingURL=GamePage.vue.js.map

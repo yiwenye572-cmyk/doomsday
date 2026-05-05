@@ -4,6 +4,7 @@ import com.doomsday.game.agent.AgentChain;
 import com.doomsday.game.agent.AgentHandler;
 import com.doomsday.game.agent.TurnContext;
 import com.doomsday.game.api.PlotPayload;
+import com.doomsday.game.common.LlmTokenEstimator;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.ai.chat.client.ChatClient;
@@ -59,7 +60,14 @@ public class NarrationAgent implements AgentHandler {
         String raw = ctx.plot.text();
         String polished;
         try {
+            long llmStart = System.nanoTime();
             polished = polish(raw);
+            long modelMs = (System.nanoTime() - llmStart) / 1_000_000;
+            String promptText = SYSTEM_PROMPT + "\n请润色以下剧情文本：\n\n" + raw;
+            int promptTokens = LlmTokenEstimator.estimatePromptTokens(promptText);
+            int completionTokens = LlmTokenEstimator.estimateCompletionTokens(polished);
+            int totalTokens = promptTokens + completionTokens;
+            ctx.addLlmMetric(name(), modelMs, promptTokens, completionTokens, totalTokens, "qwen-turbo");
             polished = truncate(polished, MAX_CHARS);
             log.debug("[{}] traceId={} polished {} → {} chars", name(), ctx.traceId, raw.length(), polished.length());
         } catch (Exception e) {

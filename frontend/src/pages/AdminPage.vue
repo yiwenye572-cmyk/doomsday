@@ -70,12 +70,15 @@ onMounted(refresh);
               <th>成功</th>
               <th>失败</th>
               <th>平均耗时(ms)</th>
+              <th>平均模型(ms)</th>
+              <th>平均排队(ms)</th>
+              <th>平均Token</th>
               <th>成功率</th>
             </tr>
           </thead>
           <tbody>
             <tr v-if="metrics.length === 0">
-              <td colspan="6" class="empty-cell">暂无数据（请先完成至少一次回合）</td>
+              <td colspan="9" class="empty-cell">暂无数据（请先完成至少一次回合）</td>
             </tr>
             <tr v-for="m in metrics" :key="m.agentName">
               <td class="agent-name">{{ m.agentName }}</td>
@@ -87,6 +90,9 @@ onMounted(refresh);
                   {{ m.avgMs.toFixed(0) }}
                 </span>
               </td>
+              <td class="mono">{{ m.avgModelMs.toFixed(0) }}</td>
+              <td class="mono">{{ m.avgQueueWaitMs.toFixed(0) }}</td>
+              <td class="mono">{{ m.avgTokens.toFixed(1) }}</td>
               <td>
                 <span :style="{ color: statusColor(m.successRate >= 0.9 ? 'OK' : 'error') }">
                   {{ successRatePct(m.successRate) }}
@@ -144,7 +150,7 @@ onMounted(refresh);
                   <div class="span-list">
                     <div
                       v-for="span in trace.spans"
-                      :key="span.agentName"
+                      :key="span.agentName + '-' + span.elapsedMs"
                       class="span-item"
                     >
                       <span class="span-name">{{ span.agentName }}</span>
@@ -154,6 +160,12 @@ onMounted(refresh);
                       >
                         {{ span.elapsedMs }}ms
                       </span>
+                      <span v-if="span.modelMs !== undefined" class="span-sub mono">模型 {{ span.modelMs }}ms</span>
+                      <span v-if="span.queueWaitMs !== undefined" class="span-sub mono">排队 {{ span.queueWaitMs }}ms</span>
+                      <span v-if="span.postProcessMs !== undefined" class="span-sub mono">后处理 {{ span.postProcessMs }}ms</span>
+                      <span v-if="span.totalTokens !== undefined" class="span-sub mono">Token {{ span.totalTokens }}</span>
+                      <span v-if="span.tokensPerSecond !== undefined" class="span-sub mono">TPS {{ span.tokensPerSecond.toFixed(1) }}</span>
+                      <span v-if="span.modelName" class="span-sub mono">{{ span.modelName }}</span>
                       <span class="span-status" :style="{ color: statusColor(span.status) }">
                         {{ span.status }}
                       </span>
@@ -312,6 +324,11 @@ h2.section-title {
 .span-status {
   font-size: 10px;
   font-family: var(--font-mono);
+}
+
+.span-sub {
+  font-size: 10px;
+  color: var(--text-03);
 }
 
 .span-error {

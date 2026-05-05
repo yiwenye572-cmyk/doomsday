@@ -13,7 +13,11 @@ import org.springframework.stereotype.Component;
 
 /**
  * Redis 指标存储：
- *  - game:metrics:agent:{agentName}    Hash  { totalCalls, successCalls, failCalls, totalMs }
+ *  - game:metrics:agent:{agentName}    Hash  {
+ *      totalCalls, successCalls, failCalls, totalMs,
+ *      totalQueueWaitMs, totalModelMs, totalPostProcessMs,
+ *      totalPromptTokens, totalCompletionTokens, totalTokens
+ *    }
  *  - game:metrics:trace:{traceId}      String JSON  TraceDetail  TTL=2h
  *  - game:metrics:traces:index         List  traceId 列表，最近 200 条
  */
@@ -35,12 +39,26 @@ public class AgentMetricsStore {
         this.objectMapper = objectMapper;
     }
 
-    /** 记录单个 Agent 调用结果 */
-    public void recordAgentCall(String agentName, long elapsedMs, boolean success) {
+    /** 记录单个 Agent 调用结果（包含阶段耗时与 token）。 */
+    public void recordAgentCall(String agentName,
+                                long elapsedMs,
+                                long queueWaitMs,
+                                long modelMs,
+                                long postProcessMs,
+                                int promptTokens,
+                                int completionTokens,
+                                int totalTokens,
+                                boolean success) {
         String key = AGENT_METRICS_PREFIX + agentName;
         try {
             redis.opsForHash().increment(key, "totalCalls", 1);
             redis.opsForHash().increment(key, "totalMs", elapsedMs);
+            redis.opsForHash().increment(key, "totalQueueWaitMs", Math.max(0, queueWaitMs));
+            redis.opsForHash().increment(key, "totalModelMs", Math.max(0, modelMs));
+            redis.opsForHash().increment(key, "totalPostProcessMs", Math.max(0, postProcessMs));
+            redis.opsForHash().increment(key, "totalPromptTokens", Math.max(0, promptTokens));
+            redis.opsForHash().increment(key, "totalCompletionTokens", Math.max(0, completionTokens));
+            redis.opsForHash().increment(key, "totalTokens", Math.max(0, totalTokens));
             if (success) {
                 redis.opsForHash().increment(key, "successCalls", 1);
             } else {
@@ -76,9 +94,34 @@ public class AgentMetricsStore {
                 long success = parseLong(raw, "successCalls");
                 long fail = parseLong(raw, "failCalls");
                 long totalMs = parseLong(raw, "totalMs");
+                long totalQueueWaitMs = parseLong(raw, "totalQueueWaitMs");
+                long totalModelMs = parseLong(raw, "totalModelMs");
+                long totalPostProcessMs = parseLong(raw, "totalPostProcessMs");
+                long totalPromptTokens = parseLong(raw, "totalPromptTokens");
+                long totalCompletionTokens = parseLong(raw, "totalCompletionTokens");
+                long totalTokens = parseLong(raw, "totalTokens");
                 double avgMs = total > 0 ? (double) totalMs / total : 0;
+                double avgQueueWaitMs = total > 0 ? (double) totalQueueWaitMs / total : 0;
+                double avgModelMs = total > 0 ? (double) totalModelMs / total : 0;
+                double avgPostProcessMs = total > 0 ? (double) totalPostProcessMs / total : 0;
+                double avgPromptTokens = total > 0 ? (double) totalPromptTokens / total : 0;
+                double avgCompletionTokens = total > 0 ? (double) totalCompletionTokens / total : 0;
+                double avgTokens = total > 0 ? (double) totalTokens / total : 0;
                 double successRate = total > 0 ? (double) success / total : 0;
-                result.add(new AgentMetricsSummary(agentName, total, success, fail, avgMs, successRate));
+                result.add(new AgentMetricsSummary(
+                        agentName,
+                        total,
+                        success,
+                        fail,
+                        avgMs,
+                        avgQueueWaitMs,
+                        avgModelMs,
+                        avgPostProcessMs,
+                        avgPromptTokens,
+                        avgCompletionTokens,
+                        avgTokens,
+                        successRate
+                ));
             }
         } catch (Exception e) {
             log.warn("[AgentMetricsStore] getAllAgentMetrics failed: {}", e.getMessage());
@@ -93,9 +136,13 @@ public class AgentMetricsStore {
             List<String> traceIds = redis.opsForList().range(TRACE_INDEX_KEY, 0, limit - 1);
             if (traceIds == null) return result;
             for (String traceId : traceIds) {
-                String json = redis.opsForValue().get(TRACE_PREFIX + traceId);
-                if (json != null) {
-                    result.add(objectMapper.readValue(json, TraceDetail.class));
+                try {
+                    String json = redis.opsForValue().get(TRACE_PREFIX + traceId);
+                    if (json != null) {
+                        result.add(objectMapper.readValue(json, TraceDetail.class));
+                    }
+                } catch (Exception decodeError) {
+                    log.warn("[AgentMetricsStore] skip malformed trace {}: {}", traceId, decodeError.getMessage());
                 }
             }
         } catch (Exception e) {
@@ -130,6 +177,12 @@ public class AgentMetricsStore {
             long successCalls,
             long failCalls,
             double avgMs,
+            double avgQueueWaitMs,
+            double avgModelMs,
+            double avgPostProcessMs,
+            double avgPromptTokens,
+            double avgCompletionTokens,
+            double avgTokens,
             double successRate
     ) {}
 
@@ -147,6 +200,14 @@ public class AgentMetricsStore {
             String agentName,
             long elapsedMs,
             String status,
-            String errorMessage
+            String errorMessage,
+            Long queueWaitMs,
+            Long modelMs,
+            Long postProcessMs,
+            Integer promptTokens,
+            Integer completionTokens,
+            Integer totalTokens,
+            Double tokensPerSecond,
+            String modelName
     ) {}
 }
