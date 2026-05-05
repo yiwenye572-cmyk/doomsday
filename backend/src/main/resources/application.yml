@@ -75,4 +75,11 @@ management:
 game:
   chaos:
     enabled: false
+  media:
+    image:
+      timeout-ms: 3000
+      dashscope-model: wanx2.1-t2i-turbo
+    pexels:
+      api-key: ${PEXELS_API_KEY:not-configured}
+      base-url: https://api.pexels.com/v1
 

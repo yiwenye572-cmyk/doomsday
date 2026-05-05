@@ -35,7 +35,9 @@ http.interceptors.response.use(
       throw new ApiBusinessError(payload.code, payload.message, payload.traceId);
     }
 
-    return payload;
+    // keep the AxiosResponse shape but replace .data with the parsed payload
+    response.data = payload as any;
+    return response;
   },
   (error: AxiosError<ApiResponse<unknown>>) => {
     if (error.response?.data) {

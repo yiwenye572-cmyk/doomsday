@@ -26,7 +26,9 @@ http.interceptors.response.use((response) => {
     if (payload.code !== "OK") {
         throw new ApiBusinessError(payload.code, payload.message, payload.traceId);
     }
-    return payload;
+    // keep the AxiosResponse shape but replace .data with the parsed payload
+    response.data = payload;
+    return response;
 }, (error) => {
     if (error.response?.data) {
         const payload = error.response.data;

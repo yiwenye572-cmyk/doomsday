@@ -1,6 +1,7 @@
 import { computed, onMounted, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { chooseOption, getSessionState, submitTurn, useComebackCard } from "../api/game";
+import { generateImage, gallerySearch } from "../api/media";
 import ActionInput from "../components/game/ActionInput.vue";
 import NarrativePanel from "../components/game/NarrativePanel.vue";
 import OptionsGrid from "../components/game/OptionsGrid.vue";
@@ -10,6 +11,7 @@ const router = useRouter();
 const sessionId = computed(() => String(route.params.sessionId || ""));
 const state = ref(null);
 const plot = ref(null);
+const image = ref(null);
 const options = ref([]);
 const loading = ref(false);
 const pendingAction = ref(false);
@@ -34,6 +36,8 @@ async function handleSubmit(input) {
             clientTime: Date.now(),
         });
         plot.value = data.plot;
+        // try to generate image for the new plot (backend may fallback)
+        fetchImageForPlot(data.plot).catch(() => { });
         options.value = data.options;
         await refreshState();
     }
@@ -57,12 +61,33 @@ async function handleChoose(optionId) {
             optionId,
         });
         await refreshState();
+        await fetchImageForPlot(plot.value);
     }
     catch (e) {
         await handleError(e);
     }
     finally {
         pendingAction.value = false;
+    }
+}
+async function fetchImageForPlot(p) {
+    image.value = null;
+    if (!p || !p.text)
+        return;
+    try {
+        const resp = await generateImage({ sessionId: sessionId.value, prompt: p.text, timeoutMs: 3000 });
+        image.value = resp;
+    }
+    catch (err) {
+        try {
+            const gallery = await gallerySearch(p.text, 1);
+            if (gallery && gallery.length) {
+                image.value = gallery[0];
+            }
+        }
+        catch (e) {
+            // ignore, no image
+        }
     }
 }
 async function handleComeback() {
@@ -107,6 +132,9 @@ async function init() {
 }
 function goReplay() {
     router.push(`/replay/${sessionId.value}`);
+}
+function onRegenerate() {
+    fetchImageForPlot(plot.value).catch(() => { });
 }
 onMounted(init);
 debugger; /* PartiallyEnd: #3632/scriptSetup.vue */
@@ -159,60 +187,71 @@ if (!__VLS_ctx.loading) {
     /** @type {[typeof NarrativePanel, ]} */ ;
     // @ts-ignore
     const __VLS_0 = __VLS_asFunctionalComponent(NarrativePanel, new NarrativePanel({
+        ...{ 'onRegenerate': {} },
         plot: (__VLS_ctx.plot),
+        image: (__VLS_ctx.image),
     }));
     const __VLS_1 = __VLS_0({
+        ...{ 'onRegenerate': {} },
         plot: (__VLS_ctx.plot),
+        image: (__VLS_ctx.image),
     }, ...__VLS_functionalComponentArgsRest(__VLS_0));
+    let __VLS_3;
+    let __VLS_4;
+    let __VLS_5;
+    const __VLS_6 = {
+        onRegenerate: (__VLS_ctx.onRegenerate)
+    };
+    var __VLS_2;
     /** @type {[typeof ActionInput, ]} */ ;
     // @ts-ignore
-    const __VLS_3 = __VLS_asFunctionalComponent(ActionInput, new ActionInput({
+    const __VLS_7 = __VLS_asFunctionalComponent(ActionInput, new ActionInput({
         ...{ 'onSubmit': {} },
         ...{ 'onComeback': {} },
         loading: (__VLS_ctx.pendingAction),
     }));
-    const __VLS_4 = __VLS_3({
+    const __VLS_8 = __VLS_7({
         ...{ 'onSubmit': {} },
         ...{ 'onComeback': {} },
         loading: (__VLS_ctx.pendingAction),
-    }, ...__VLS_functionalComponentArgsRest(__VLS_3));
-    let __VLS_6;
-    let __VLS_7;
-    let __VLS_8;
-    const __VLS_9 = {
+    }, ...__VLS_functionalComponentArgsRest(__VLS_7));
+    let __VLS_10;
+    let __VLS_11;
+    let __VLS_12;
+    const __VLS_13 = {
         onSubmit: (__VLS_ctx.handleSubmit)
     };
-    const __VLS_10 = {
+    const __VLS_14 = {
         onComeback: (__VLS_ctx.handleComeback)
     };
-    var __VLS_5;
+    var __VLS_9;
     /** @type {[typeof OptionsGrid, ]} */ ;
     // @ts-ignore
-    const __VLS_11 = __VLS_asFunctionalComponent(OptionsGrid, new OptionsGrid({
+    const __VLS_15 = __VLS_asFunctionalComponent(OptionsGrid, new OptionsGrid({
         ...{ 'onChoose': {} },
         options: (__VLS_ctx.options),
         loading: (__VLS_ctx.pendingAction),
     }));
-    const __VLS_12 = __VLS_11({
+    const __VLS_16 = __VLS_15({
         ...{ 'onChoose': {} },
         options: (__VLS_ctx.options),
         loading: (__VLS_ctx.pendingAction),
-    }, ...__VLS_functionalComponentArgsRest(__VLS_11));
-    let __VLS_14;
-    let __VLS_15;
-    let __VLS_16;
-    const __VLS_17 = {
+    }, ...__VLS_functionalComponentArgsRest(__VLS_15));
+    let __VLS_18;
+    let __VLS_19;
+    let __VLS_20;
+    const __VLS_21 = {
         onChoose: (__VLS_ctx.handleChoose)
     };
-    var __VLS_13;
+    var __VLS_17;
     /** @type {[typeof StatusPanel, ]} */ ;
     // @ts-ignore
-    const __VLS_18 = __VLS_asFunctionalComponent(StatusPanel, new StatusPanel({
+    const __VLS_22 = __VLS_asFunctionalComponent(StatusPanel, new StatusPanel({
         state: (__VLS_ctx.state),
     }));
-    const __VLS_19 = __VLS_18({
+    const __VLS_23 = __VLS_22({
         state: (__VLS_ctx.state),
-    }, ...__VLS_functionalComponentArgsRest(__VLS_18));
+    }, ...__VLS_functionalComponentArgsRest(__VLS_22));
 }
 else {
     __VLS_asFunctionalElement(__VLS_intrinsicElements.section, __VLS_intrinsicElements.section)({
@@ -258,6 +297,7 @@ const __VLS_self = (await import('vue')).defineComponent({
             router: router,
             state: state,
             plot: plot,
+            image: image,
             options: options,
             loading: loading,
             pendingAction: pendingAction,
@@ -267,6 +307,7 @@ const __VLS_self = (await import('vue')).defineComponent({
             handleChoose: handleChoose,
             handleComeback: handleComeback,
             goReplay: goReplay,
+            onRegenerate: onRegenerate,
         };
     },
 });

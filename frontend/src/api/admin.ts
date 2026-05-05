@@ -43,17 +43,17 @@ export interface TraceDetail {
 
 export async function getAgentMetrics(): Promise<AgentMetricsSummary[]> {
   const res = await http.get<ApiResponse<AgentMetricsSummary[]>>("/admin/metrics/agents");
-  return (res as unknown as ApiResponse<AgentMetricsSummary[]>).data;
+  return res.data.data;
 }
 
 export async function getRecentTraces(limit = 20): Promise<TraceDetail[]> {
   const res = await http.get<ApiResponse<TraceDetail[]>>("/admin/metrics/traces", {
     params: { limit },
   });
-  return (res as unknown as ApiResponse<TraceDetail[]>).data;
+  return res.data.data;
 }
 
 export async function getTrace(traceId: string): Promise<TraceDetail> {
   const res = await http.get<ApiResponse<TraceDetail>>(`/admin/metrics/traces/${traceId}`);
-  return (res as unknown as ApiResponse<TraceDetail>).data;
+  return res.data.data;
 }

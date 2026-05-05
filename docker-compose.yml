@@ -16,6 +16,7 @@ services:
       - PG_USER=doomsday
       - PG_PASSWORD=doomsday
       - DASHSCOPE_API_KEY=${DASHSCOPE_API_KEY:-not-configured}
+      - PEXELS_API_KEY=${PEXELS_API_KEY:-not-configured}
     depends_on:
       redis:
         condition: service_healthy

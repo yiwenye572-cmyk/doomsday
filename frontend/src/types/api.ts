@@ -96,3 +96,27 @@ export interface ComebackCardResponse {
   effect: Record<string, string>;
   remainingCount: number;
 }
+
+export interface GenerateImageRequest {
+  sessionId?: string;
+  traceId?: string;
+  prompt: string;
+  style?: string;
+  timeoutMs?: number;
+}
+
+export interface GenerateImageResponse {
+  imageUrl: string;
+  source: string; // "generated" | "gallery"
+  fallback: boolean;
+  fallbackReason?: string | null;
+  provider?: string | null; // e.g. "dashscope" or "pexels"
+  latencyMs?: number;
+}
+
+export interface GalleryImageItem {
+  imageUrl: string;
+  provider: string;
+  author?: string;
+  license?: string;
+}

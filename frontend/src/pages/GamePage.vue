@@ -2,7 +2,8 @@
 import { computed, onMounted, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { chooseOption, getSessionState, submitTurn, useComebackCard } from "../api/game";
-import type { OptionPayload, PlotPayload, SessionState } from "../types/api";
+import { generateImage, gallerySearch } from "../api/media";
+import type { OptionPayload, PlotPayload, SessionState, GenerateImageResponse, GalleryImageItem } from "../types/api";
 import ActionInput from "../components/game/ActionInput.vue";
 import NarrativePanel from "../components/game/NarrativePanel.vue";
 import OptionsGrid from "../components/game/OptionsGrid.vue";
@@ -15,6 +16,7 @@ const sessionId = computed(() => String(route.params.sessionId || ""));
 
 const state = ref<SessionState | null>(null);
 const plot = ref<PlotPayload | null>(null);
+const image = ref<GenerateImageResponse | GalleryImageItem | null>(null);
 const options = ref<OptionPayload[]>([]);
 const loading = ref(false);
 const pendingAction = ref(false);
@@ -42,6 +44,8 @@ async function handleSubmit(input: string) {
       clientTime: Date.now(),
     });
     plot.value = data.plot;
+    // try to generate image for the new plot (backend may fallback)
+    fetchImageForPlot(data.plot).catch(() => {});
     options.value = data.options;
     await refreshState();
   } catch (e) {
@@ -64,10 +68,29 @@ async function handleChoose(optionId: string) {
       optionId,
     });
     await refreshState();
+    await fetchImageForPlot(plot.value);
   } catch (e) {
     await handleError(e);
   } finally {
     pendingAction.value = false;
+  }
+}
+
+async function fetchImageForPlot(p: PlotPayload | null) {
+  image.value = null;
+  if (!p || !p.text) return;
+  try {
+    const resp = await generateImage({ sessionId: sessionId.value, prompt: p.text, timeoutMs: 3000 });
+    image.value = resp;
+  } catch (err) {
+    try {
+      const gallery = await gallerySearch(p.text, 1);
+      if (gallery && gallery.length) {
+        image.value = gallery[0];
+      }
+    } catch (e) {
+      // ignore, no image
+    }
   }
 }
 
@@ -114,6 +137,10 @@ function goReplay() {
   router.push(`/replay/${sessionId.value}`);
 }
 
+function onRegenerate() {
+  fetchImageForPlot(plot.value).catch(() => {});
+}
+
 onMounted(init);
 </script>
 
@@ -133,7 +160,7 @@ onMounted(init);
 
     <section class="layout" v-if="!loading">
       <div class="main-col">
-        <NarrativePanel :plot="plot" />
+        <NarrativePanel :plot="plot" :image="image" @regenerate="onRegenerate" />
         <ActionInput :loading="pendingAction" @submit="handleSubmit" @comeback="handleComeback" />
         <OptionsGrid :options="options" :loading="pendingAction" @choose="handleChoose" />
       </div>

@@ -1,8 +1,13 @@
 <script setup lang="ts">
-import type { PlotPayload } from "../../types/api";
+import type { PlotPayload, GenerateImageResponse, GalleryImageItem } from "../../types/api";
+import ImageCard from "./ImageCard.vue";
 
-defineProps<{
+const props = defineProps<{
   plot: PlotPayload | null;
+  image?: GenerateImageResponse | GalleryImageItem | null;
+}>();
+const emit = defineEmits<{
+  (e: "regenerate"): void;
 }>();
 </script>
 
@@ -18,6 +23,8 @@ defineProps<{
     <article class="plot" v-else>
       {{ plot.text }}
     </article>
+
+    <ImageCard v-if="props.image" :image="props.image" @regenerate="() => emit('regenerate')" />
 
     <footer class="citations" v-if="plot && plot.citations?.length">
       <span class="meta">证据来源</span>

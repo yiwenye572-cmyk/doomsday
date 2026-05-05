@@ -19,12 +19,12 @@ function idempotencyKey() {
 
 export async function createSession(payload: CreateSessionRequest): Promise<CreateSessionResponse> {
   const response = await http.post<ApiResponse<CreateSessionResponse>>("/game/sessions", payload);
-  return response.data;
+  return response.data.data;
 }
 
 export async function getSessionState(sessionId: string): Promise<SessionState> {
   const response = await http.get<ApiResponse<SessionState>>(`/game/sessions/${sessionId}/state`);
-  return response.data;
+  return response.data.data;
 }
 
 export async function submitTurn(sessionId: string, payload: SubmitTurnRequest): Promise<SubmitTurnResponse> {
@@ -37,7 +37,7 @@ export async function submitTurn(sessionId: string, payload: SubmitTurnRequest):
       },
     },
   );
-  return response.data;
+  return response.data.data;
 }
 
 export async function chooseOption(
@@ -49,7 +49,7 @@ export async function chooseOption(
     `/game/sessions/${sessionId}/turns/${turn}/choose`,
     payload,
   );
-  return response.data;
+  return response.data.data;
 }
 
 export async function useComebackCard(
@@ -60,7 +60,7 @@ export async function useComebackCard(
     `/game/sessions/${sessionId}/comeback-card`,
     payload,
   );
-  return response.data;
+  return response.data.data;
 }
 
 export async function getReplay(
@@ -70,5 +70,5 @@ export async function getReplay(
   const response = await http.get<ApiResponse<string>>(`/game/sessions/${sessionId}/replay`, {
     params: range,
   });
-  return response.data;
+  return response.data.data;
 }

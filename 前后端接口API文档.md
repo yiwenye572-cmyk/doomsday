@@ -267,7 +267,7 @@
 
 ## 4. 离线世界观工厂接口（管理端）
 
-> 状态：以下接口为规划项，当前后端未提供 `/api/v1/admin/**` 实现。前端联调请勿依赖。
+> 状态：以下接口为规划项。注意：监控类管理接口已在第 5 节单独标注为“已实现”。
 
 ## 4.1 提交世界观说明书
 - Method: `POST`
@@ -345,9 +345,89 @@
 
 ## 5. 可观测与运维接口（管理端）
 
-> 状态：以下管理端接口为规划项，当前可用能力为 Spring Boot Actuator（`/actuator/health`、`/actuator/metrics`）。
+> 状态说明：
+> - 已实现：`/api/v1/admin/metrics/agents`、`/api/v1/admin/metrics/traces`、`/api/v1/admin/metrics/traces/{traceId}`
+> - 已实现基础运维：`/actuator/health`、`/actuator/metrics`
+> - 其余接口为规划中
 
-## 5.1 会话指标查询
+## 5.1 Agent 聚合指标（已实现）
+- Method: `GET`
+- Path: `/admin/metrics/agents`
+- 说明：返回各 Agent 的调用统计、阶段耗时与 token 聚合均值。
+
+响应 data（示例）：
+```json
+[
+  {
+    "agentName": "PlotGenerationAgent",
+    "totalCalls": 128,
+    "successCalls": 126,
+    "failCalls": 2,
+    "avgMs": 4210.5,
+    "avgQueueWaitMs": 34.1,
+    "avgModelMs": 3860.7,
+    "avgPostProcessMs": 315.7,
+    "avgPromptTokens": 812.3,
+    "avgCompletionTokens": 386.2,
+    "avgTokens": 1198.5,
+    "successRate": 0.984
+  }
+]
+```
+
+## 5.2 最近 Trace 列表（已实现）
+- Method: `GET`
+- Path: `/admin/metrics/traces`
+- Query:
+  - `limit`（可选，默认 20，最大 100）
+
+响应 data（示例）：
+```json
+[
+  {
+    "traceId": "trace_ab12cd34ef56",
+    "sessionId": "s_1777981433161_29a1",
+    "turn": 4,
+    "startedAt": 1777982006000,
+    "elapsedMs": 8725,
+    "finalStatus": "OK",
+    "spans": [
+      {
+        "agentName": "RouterAgent",
+        "elapsedMs": 118,
+        "status": "success",
+        "errorMessage": null,
+        "queueWaitMs": 2,
+        "modelMs": 76,
+        "postProcessMs": 42,
+        "promptTokens": 210,
+        "completionTokens": 18,
+        "totalTokens": 228,
+        "tokensPerSecond": 3000.0,
+        "modelName": "qwen-turbo"
+      }
+    ]
+  }
+]
+```
+
+## 5.3 单条 Trace 详情（已实现）
+- Method: `GET`
+- Path: `/admin/metrics/traces/{traceId}`
+- 说明：返回完整链路 span，用于排查单次慢请求。
+
+错误示例：
+```json
+{
+  "code": "NOT_FOUND",
+  "message": "trace not found",
+  "data": null,
+  "traceId": "tr_xxx",
+  "timestamp": 1760000001111
+}
+```
+
+## 5.4 会话聚合指标（规划中）
 - Method: `GET`
 - Path: `/admin/metrics/sessions`
 - Query:
@@ -363,24 +443,6 @@
   "tokenPerTurnAvg": 1280,
   "challengeBandHitRate": 0.67,
   "threeFailStreakRate": 0.08
-}
-```
-
-## 5.2 链路追踪详情
-- Method: `GET`
-- Path: `/admin/traces/{traceId}`
-
-响应 data（示例）：
-```json
-{
-  "traceId": "tr_xxx",
-  "agents": [
-    {"name": "RouterAgent", "costMs": 46, "status": "OK"},
-    {"name": "RetrievalAgent", "costMs": 128, "status": "OK"},
-    {"name": "DifficultyDirectorAgent", "costMs": 34, "status": "OK"},
-    {"name": "PlotGenerationAgent", "costMs": 712, "status": "OK"}
-  ],
-  "finalStatus": "OK"
 }
 ```
 
@@ -403,3 +465,114 @@
 - v1 路径固定 `/api/v1`。
 - 破坏性变更升 `/api/v2`。
 - 字段新增遵循向后兼容，不删除旧字段。
+
+---
+
+## 8. 关键增强接口（项目完善计划）
+
+> 状态说明：以下为“完善项目计划书”中的关键 API；除特别标注“已实现”外，默认为规划中。
+
+## 8.1 离线评测集管理（规划中）
+
+### 8.1.1 创建评测任务
+- Method: `POST`
+- Path: `/admin/evals/jobs`
+- 说明：基于离线评测集触发一次完整评估。
+
+请求体：
+```json
+{
+  "datasetId": "eval_ds_v1",
+  "candidateVersion": "backend_20260505",
+  "modes": ["intent", "retrieval", "consistency", "latency"]
+}
+```
+
+响应 data：
+```json
+{
+  "jobId": "eval_job_001",
+  "status": "PENDING"
+}
+```
+
+### 8.1.2 查询评测任务
+- Method: `GET`
+- Path: `/admin/evals/jobs/{jobId}`
+
+响应 data（示例）：
+```json
+{
+  "jobId": "eval_job_001",
+  "status": "DONE",
+  "summary": {
+    "intentAccuracy": 0.91,
+    "retrievalRecallAt5": 0.86,
+    "ruleConflictRate": 0.03,
+    "p95LatencyMs": 9580,
+    "avgTokensPerTurn": 1620
+  }
+}
+```
+
+## 8.2 文生图 + 图库兜底最小闭环（已实现最小闭环）
+
+### 8.2.1 生成剧情配图
+- Method: `POST`
+- Path: `/media/images/generate`
+- 说明：先尝试文生图，超时或失败则自动回退图库检索。
+- 环境变量：`PEXELS_API_KEY` 必须配置，否则回退链路不可用。
+
+请求体：
+```json
+{
+  "sessionId": "s_20260501_001",
+  "traceId": "trace_ab12cd34ef56",
+  "prompt": "末日夜雨中的废弃加油站，冷色调，压抑氛围",
+  "style": "grim_realism",
+  "timeoutMs": 3000
+}
+```
+
+响应 data：
+```json
+{
+  "imageUrl": "https://cdn.example.com/game/scene_001.webp",
+  "source": "generated",
+  "fallback": false,
+  "fallbackReason": null,
+  "provider": "dashscope",
+  "latencyMs": 1820
+}
+```
+
+回退示例（当前环境常见）：
+```json
+{
+  "imageUrl": "https://images.pexels.com/photos/31503000/pexels-photo-31503000.jpeg?...",
+  "source": "gallery",
+  "fallback": true,
+  "fallbackReason": "dashscope status=403",
+  "provider": "pexels",
+  "latencyMs": 1057
+}
+```
+
+### 8.2.2 图库检索（显式调用）
+- Method: `GET`
+- Path: `/media/images/gallery-search`
+- Query:
+  - `q`（剧情关键词）
+  - `limit`（默认 5）
+
+响应 data（示例）：
+```json
+[
+  {
+    "imageUrl": "https://images.pexels.com/xxx.jpeg",
+    "provider": "pexels",
+    "author": "John Doe",
+    "license": "Pexels License"
+  }
+]
+```
