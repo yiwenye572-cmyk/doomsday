@@ -1,5 +1,6 @@
 package com.doomsday.game.agent;
 
+import com.doomsday.game.admin.AgentMetricsStore;
 import com.doomsday.game.agent.impl.DifficultyDirectorAgent;
 import com.doomsday.game.agent.impl.NarrationAgent;
 import com.doomsday.game.agent.impl.OptionGenerationAgent;
@@ -37,6 +38,7 @@ public class TurnOrchestrator {
     private final SessionRepository sessionRepo;
     private final List<AgentHandler> preCommitPipeline;
     private final List<AgentHandler> postCommitPipeline;
+    private final AgentMetricsStore metricsStore;
 
     public TurnOrchestrator(
             RouterAgent router,
@@ -47,8 +49,10 @@ public class TurnOrchestrator {
             RuleGuardAgent ruleGuard,
             StateCommitAgent stateCommit,
             NarrationAgent narration,
-            SessionRepository sessionRepo) {
+            SessionRepository sessionRepo,
+            AgentMetricsStore metricsStore) {
         this.sessionRepo = sessionRepo;
+        this.metricsStore = metricsStore;
         // 前半段：直到 RuleGuard 完成校验，由 Orchestrator 做仲裁。
         this.preCommitPipeline = List.of(
                 router, retrieval, difficultyDirector,
@@ -93,6 +97,7 @@ public class TurnOrchestrator {
         if (ctx.aborted) {
             log.warn("[Orchestrator] ABORTED traceId={} reason={} elapsed={}ms",
                     traceId, ctx.abortReason, elapsed);
+            saveTrace(ctx, t0, elapsed, "ABORTED");
             throw new ApiException("AGENT_ABORT", ctx.abortReason);
         }
 
@@ -100,6 +105,7 @@ public class TurnOrchestrator {
 
         log.info("[Orchestrator] DONE traceId={} turn={} v={} elapsed={}ms",
                 traceId, session.getTurn(), session.getVersion(), elapsed);
+        saveTrace(ctx, t0, elapsed, "OK");
         return ctx;
     }
 
@@ -222,5 +228,22 @@ public class TurnOrchestrator {
                 + "; 体力损耗=" + resolveStaminaLoss(ctx)
                 + "; 收益=" + (resolveRewardFlags(ctx).isEmpty() ? "无" : String.join("/", resolveRewardFlags(ctx)))
                 + "; 摘要=" + shorten(narration, 64);
+    }
+
+    private void saveTrace(TurnContext ctx, long t0, long elapsed, String status) {
+        try {
+            AgentMetricsStore.TraceDetail trace = new AgentMetricsStore.TraceDetail(
+                    ctx.traceId,
+                    ctx.sessionId,
+                    ctx.session.getTurn(),
+                    t0,
+                    elapsed,
+                    status,
+                    new ArrayList<>(ctx.agentSpans)
+            );
+            metricsStore.saveTrace(trace);
+        } catch (Exception e) {
+            log.warn("[Orchestrator] saveTrace failed: {}", e.getMessage());
+        }
     }
 }

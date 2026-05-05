@@ -127,6 +127,7 @@ onMounted(init);
       <div class="top-actions">
         <button class="btn" @click="router.push('/')">新会话</button>
         <button class="btn" @click="goReplay">回放</button>
+        <button class="btn btn--admin" @click="router.push('/admin')">Admin</button>
       </div>
     </header>
 
@@ -141,6 +142,9 @@ onMounted(init);
 
     <section class="panel loading-box" v-else>正在加载会话状态...</section>
 
+    <p class="notice processing" v-if="pendingAction && !notice">
+      AI 正在生成剧情中，请稍候（约 15-30 秒）…
+    </p>
     <p class="notice" v-if="notice">{{ notice }}</p>
   </main>
 </template>
@@ -197,6 +201,15 @@ h1 {
   margin: 0;
   font-size: 13px;
   color: var(--danger);
+}
+
+.notice.processing {
+  color: var(--text-03);
+}
+
+.btn--admin {
+  opacity: 0.7;
+  font-size: 11px;
 }
 
 @media (max-width: 1199px) {

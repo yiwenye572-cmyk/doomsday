@@ -18,6 +18,11 @@ const router = createRouter({
       name: "replay",
       component: () => import("../pages/ReplayPage.vue"),
     },
+    {
+      path: "/admin",
+      name: "admin",
+      component: () => import("../pages/AdminPage.vue"),
+    },
   ],
 });
 

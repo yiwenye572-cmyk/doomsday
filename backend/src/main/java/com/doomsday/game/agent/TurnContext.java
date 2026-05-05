@@ -4,6 +4,7 @@ import com.doomsday.game.api.DifficultyDeltaPayload;
 import com.doomsday.game.api.OptionPayload;
 import com.doomsday.game.api.PlotPayload;
 import com.doomsday.game.api.StateDeltaPayload;
+import com.doomsday.game.admin.AgentMetricsStore;
 import com.doomsday.game.domain.GameSession;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -63,6 +64,9 @@ public class TurnContext {
     public boolean aborted = false;
     public String abortReason;
     public final Map<String, Object> extras = new HashMap<>();
+
+    // ===== 可观测性：AOP 切面写入各 Agent 分段耗时 =====
+    public List<AgentMetricsStore.AgentSpan> agentSpans = new ArrayList<>();
 
     public TurnContext(String sessionId, GameSession session,
                        String playerInput, String idempotencyKey, String traceId) {

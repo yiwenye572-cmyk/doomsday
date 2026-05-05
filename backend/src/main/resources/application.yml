@@ -48,8 +48,7 @@ spring:
           max-tokens: 1024
       embedding:
         options:
-          # 向量模型，1536 维 与 V1/V3 migration schema 对齐
-          # ⚠️ 待确认：可替换为 text-embedding-v4（需同步修改 dimensions）
+          # 向量模型，text-embedding-v3 默认输出 1024 维，与 V1/V3/V4 migration schema 对齐
           model: text-embedding-v3
 
     # ===== PgVector Store (RAG) =====
@@ -59,8 +58,8 @@ spring:
         initialize-schema: false
         schema-name: public
         table-name: vector_store
-        # 必须与 V3 migration 的 VECTOR(1536) 维度一致
-        dimensions: 1536
+        # 必须与 V4 migration 修正后的 VECTOR(1024) 维度一致（text-embedding-v3 默认 1024 维）
+        dimensions: 1024
         distance-type: COSINE_DISTANCE
         index-type: IVFFLAT
 

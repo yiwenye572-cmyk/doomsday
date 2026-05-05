@@ -15,7 +15,7 @@ export class ApiBusinessError extends Error {
 
 const http = axios.create({
   baseURL: "/api/v1",
-  timeout: 15000,
+  timeout: 60000, // LLM 调用可能耗时 20-30s，60s 宽限
 });
 
 http.interceptors.request.use((config) => {
