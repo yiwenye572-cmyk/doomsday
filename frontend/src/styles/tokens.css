@@ -1,0 +1,37 @@
+:root {
+  --font-display: "Bebas Neue", sans-serif;
+  --font-body: "Noto Sans SC", sans-serif;
+  --font-mono: "IBM Plex Mono", monospace;
+
+  --bg-00: #090b10;
+  --bg-01: #10151d;
+  --bg-02: #171f2b;
+  --bg-03: #202938;
+  --line-soft: rgba(180, 197, 217, 0.16);
+  --line-hard: rgba(180, 197, 217, 0.3);
+  --text-01: #e4ecf8;
+  --text-02: #b7c2d1;
+  --text-03: #8290a7;
+  --accent: #ff6a3d;
+  --accent-soft: rgba(255, 106, 61, 0.2);
+  --danger: #f05f5f;
+  --ok: #61c68c;
+
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+
+  --radius-sm: 8px;
+  --radius-md: 14px;
+  --radius-lg: 18px;
+  --radius-xl: 24px;
+
+  --shadow-1: 0 8px 24px rgba(4, 6, 9, 0.35);
+  --shadow-2: 0 18px 40px rgba(2, 3, 6, 0.45);
+
+  --transition-fast: 120ms ease;
+  --transition-mid: 260ms ease;
+}

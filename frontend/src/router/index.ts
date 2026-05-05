@@ -1,0 +1,24 @@
+import { createRouter, createWebHistory } from "vue-router";
+
+const router = createRouter({
+  history: createWebHistory(),
+  routes: [
+    {
+      path: "/",
+      name: "boot",
+      component: () => import("../pages/BootPage.vue"),
+    },
+    {
+      path: "/game/:sessionId",
+      name: "game",
+      component: () => import("../pages/GamePage.vue"),
+    },
+    {
+      path: "/replay/:sessionId",
+      name: "replay",
+      component: () => import("../pages/ReplayPage.vue"),
+    },
+  ],
+});
+
+export default router;

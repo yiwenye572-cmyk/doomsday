@@ -1,0 +1,7 @@
+.env
+target/
+backend/target/
+node_modules/
+dist/
+.vscode/
+*.log
