@@ -1,6 +1,7 @@
 package com.doomsday.game.worldfactory;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.ArrayList;
 import java.util.List;
@@ -13,6 +14,7 @@ import java.util.concurrent.Executors;
 import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 
@@ -23,11 +25,13 @@ public class WorldFactoryJobWorker {
 
     private final JdbcTemplate jdbcTemplate;
     private final ObjectMapper objectMapper;
+    private final ChatClient chatClient;
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
 
-    public WorldFactoryJobWorker(JdbcTemplate jdbcTemplate, ObjectMapper objectMapper) {
+    public WorldFactoryJobWorker(JdbcTemplate jdbcTemplate, ObjectMapper objectMapper, ChatClient chatClient) {
         this.jdbcTemplate = jdbcTemplate;
         this.objectMapper = objectMapper;
+        this.chatClient = chatClient;
     }
 
     public void enqueue(String jobId, String worldVersion, WorldSourceType sourceType, String rawContent, boolean forceRebuild) {
@@ -36,12 +40,19 @@ public class WorldFactoryJobWorker {
 
     void process(String jobId, String worldVersion, WorldSourceType sourceType, String rawContent, boolean forceRebuild) {
         try {
+            // BASIC_PROFILE：rawContent 存的是 profile JSON，在后台异步调用 AI 展开
+            String content = rawContent;
+            if (sourceType == WorldSourceType.BASIC_PROFILE) {
+                updateJob(jobId, "RUNNING", 2, "AI_GENERATE", null);
+                content = expandProfileWithAi(rawContent);
+            }
+
             updateJob(jobId, "RUNNING", 5, "CHUNKING", null);
-            List<String> chunks = chunk(rawContent);
+            List<String> chunks = chunk(content);
             saveChunks(worldVersion, chunks);
 
             updateJob(jobId, "RUNNING", 35, "EXTRACT", null);
-            saveEntities(worldVersion, rawContent);
+            saveEntities(worldVersion, content);
 
             updateJob(jobId, "RUNNING", 60, "TAGGING", null);
             tagChunks(worldVersion);
@@ -55,6 +66,74 @@ public class WorldFactoryJobWorker {
             log.error("[WorldFactory] job failed jobId={} err={}", jobId, e.getMessage(), e);
             updateJob(jobId, "FAILED", 100, "FAILED", e.getMessage());
         }
+    }
+
+    private String expandProfileWithAi(String profileJson) {
+        try {
+            @SuppressWarnings("unchecked")
+            Map<String, String> profile = objectMapper.readValue(profileJson, new TypeReference<Map<String, String>>() {});
+            String prompt = """
+                    你是末日生存游戏世界工厂。请基于以下基础设定生成世界书，输出 markdown：
+                    - 世界主题: %s
+                    - 时代风格: %s
+                    - 生存基调: %s
+                    - 核心势力: %s
+                    - 禁忌规则: %s
+
+                    必须包含章节：世界背景、区域设定、势力关系、资源规则、风险事件、实体状态机、禁忌规则。
+                    """.formatted(
+                    safeGet(profile, "worldTheme"),
+                    safeGet(profile, "eraStyle"),
+                    safeGet(profile, "survivalTone"),
+                    safeGet(profile, "keyFaction"),
+                    safeGet(profile, "forbiddenRule")
+            );
+            String result = chatClient.prompt().user(prompt).call().content();
+            if (result == null || result.isBlank()) {
+                return defaultWorldBook();
+            }
+            return result;
+        } catch (Exception e) {
+            log.warn("[WorldFactory] AI expand failed, using default worldBook err={}", e.getMessage());
+            return defaultWorldBook();
+        }
+    }
+
+    private String safeGet(Map<String, String> map, String key) {
+        String v = map.get(key);
+        return (v == null || v.isBlank()) ? "未设定" : v;
+    }
+
+    private String defaultWorldBook() {
+        return """
+                # 世界背景
+                文明崩坏后第17年，连续酸雨和能源危机让城市网络彻底碎裂。
+
+                # 区域设定
+                - safe_house: 临时避难点，资源稀缺但相对安全。
+                - old_gas_station: 可搜刮燃料与药品，伴随高噪声风险。
+                - subway_ruins: 高价值物资区，感染者密度高。
+
+                # 势力关系
+                - 灰烬商会：掌控药品交换渠道。
+                - 夜巡队：提供低强度治安，但要求上缴资源。
+                - 无旗流民：随机出现，可能交易也可能掠夺。
+
+                # 资源规则
+                - 高价值物资通常伴随高风险事件。
+                - 体力低于20时，探索效率下降且受伤概率上升。
+
+                # 风险事件
+                - 夜雨伏击、感染扩散、资源争夺、局部塌陷。
+
+                # 实体状态机
+                - 玩家：NORMAL -> TIRED -> CRITICAL
+                - 感染者：DORMANT -> ALERT -> HUNTING
+
+                # 禁忌规则
+                - 不得在高感染区连续停留超过3回合。
+                - 高噪声动作不得连续两回合触发。
+                """;
     }
 
     private List<String> chunk(String content) {

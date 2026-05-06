@@ -6,10 +6,10 @@ import com.doomsday.game.world.EventCardRepository;
 import com.doomsday.game.worldfactory.dto.GameWorldInitRequest;
 import com.doomsday.game.worldfactory.dto.WorldFactoryJobRequest;
 import com.doomsday.game.worldfactory.dto.WorldFactoryJobResponse;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
-import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 
@@ -20,18 +20,18 @@ public class WorldFactoryJobService {
 
     private final JdbcTemplate jdbcTemplate;
     private final WorldFactoryJobWorker worker;
-    private final ChatClient chatClient;
+    private final ObjectMapper objectMapper;
     private final LorebookEntryRepository lorebookRepo;
     private final EventCardRepository eventCardRepo;
 
     public WorldFactoryJobService(JdbcTemplate jdbcTemplate,
                                   WorldFactoryJobWorker worker,
-                                  ChatClient chatClient,
+                                  ObjectMapper objectMapper,
                                   LorebookEntryRepository lorebookRepo,
                                   EventCardRepository eventCardRepo) {
         this.jdbcTemplate = jdbcTemplate;
         this.worker = worker;
-        this.chatClient = chatClient;
+        this.objectMapper = objectMapper;
         this.lorebookRepo = lorebookRepo;
         this.eventCardRepo = eventCardRepo;
     }
@@ -106,40 +106,19 @@ public class WorldFactoryJobService {
                 }
                 yield request.content();
             }
-            case BASIC_PROFILE -> generateWorldBookFromProfile(request.basicProfile());
-        };
-    }
-
-    private String generateWorldBookFromProfile(Map<String, String> profile) {
-        if (profile == null || profile.isEmpty()) {
-            throw new ApiException("BAD_REQUEST", "basicProfile is required for BASIC_PROFILE source");
-        }
-        String prompt = """
-                你是末日生存游戏世界工厂。请基于以下基础设定生成世界书，输出 markdown：
-                - 世界主题: %s
-                - 时代风格: %s
-                - 生存基调: %s
-                - 核心势力: %s
-                - 禁忌规则: %s
-
-                必须包含章节：世界背景、区域设定、势力关系、资源规则、风险事件、实体状态机、禁忌规则。
-                """.formatted(
-                safe(profile.get("worldTheme")),
-                safe(profile.get("eraStyle")),
-                safe(profile.get("survivalTone")),
-                safe(profile.get("keyFaction")),
-                safe(profile.get("forbiddenRule"))
-        );
-
-        try {
-            String content = chatClient.prompt().user(prompt).call().content();
-            if (content == null || content.isBlank()) {
-                return defaultWorldBook();
+            // BASIC_PROFILE：序列化 profile JSON，交给后台 Worker 异步调用 AI 展开
+            case BASIC_PROFILE -> {
+                Map<String, String> profile = request.basicProfile();
+                if (profile == null || profile.isEmpty()) {
+                    throw new ApiException("BAD_REQUEST", "basicProfile is required for BASIC_PROFILE source");
+                }
+                try {
+                    yield objectMapper.writeValueAsString(profile);
+                } catch (Exception e) {
+                    yield defaultWorldBook();
+                }
             }
-            return content;
-        } catch (Exception e) {
-            return defaultWorldBook();
-        }
+        };
     }
 
     private String defaultWorldBook() {

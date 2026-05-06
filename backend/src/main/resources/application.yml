@@ -36,6 +36,11 @@ spring:
 
   # ===== Spring AI Alibaba (DashScope) =====
   ai:
+    retry:
+      # 减少重试次数，避免多次超时累计导致请求超时（agent 层已有 fallback）
+      max-attempts: 1
+      initial-interval: 1s
+      max-interval: 5s
     dashscope:
       # 从环境变量注入；本地开发可在 .env 或 IDE Run Config 中设置 DASHSCOPE_API_KEY=sk-xxx
       api-key: ${DASHSCOPE_API_KEY:not-configured}
