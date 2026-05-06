@@ -11,6 +11,8 @@ import com.doomsday.game.agent.impl.RuleGuardAgent;
 import com.doomsday.game.agent.impl.StateCommitAgent;
 import com.doomsday.game.api.OptionPayload;
 import com.doomsday.game.api.PlotPayload;
+import com.doomsday.game.arbitration.ConflictArbitrator;
+import com.doomsday.game.arbitration.dto.ArbitrationResult;
 import com.doomsday.game.common.ApiException;
 import com.doomsday.game.domain.GameSession;
 import com.doomsday.game.domain.SessionRepository;
@@ -39,6 +41,7 @@ public class TurnOrchestrator {
     private final List<AgentHandler> preCommitPipeline;
     private final List<AgentHandler> postCommitPipeline;
     private final AgentMetricsStore metricsStore;
+    private final ConflictArbitrator conflictArbitrator;
 
     public TurnOrchestrator(
             RouterAgent router,
@@ -50,9 +53,11 @@ public class TurnOrchestrator {
             StateCommitAgent stateCommit,
             NarrationAgent narration,
             SessionRepository sessionRepo,
-            AgentMetricsStore metricsStore) {
+            AgentMetricsStore metricsStore,
+            ConflictArbitrator conflictArbitrator) {
         this.sessionRepo = sessionRepo;
         this.metricsStore = metricsStore;
+        this.conflictArbitrator = conflictArbitrator;
         // 前半段：直到 RuleGuard 完成校验，由 Orchestrator 做仲裁。
         this.preCommitPipeline = List.of(
                 router, retrieval, difficultyDirector,
@@ -86,6 +91,18 @@ public class TurnOrchestrator {
                 log.warn("[Orchestrator] FALLBACK traceId={} violations={}", traceId, ctx.violations);
             } else {
                 ctx.abort("RULE_GUARD_BLOCK: " + String.join(";", ctx.violations));
+            }
+        }
+
+        if (!ctx.aborted) {
+            ArbitrationResult arbitration = conflictArbitrator.evaluate(ctx);
+            ctx.extras.put("arbitration", arbitration);
+            if (!arbitration.pass()) {
+                if ("SWITCH_TO_SAFE_OPTIONS".equals(arbitration.finalAction())) {
+                    applyFallback(ctx);
+                } else {
+                    ctx.abort("ARBITRATION_BLOCK: " + arbitration.reason());
+                }
             }
         }
 

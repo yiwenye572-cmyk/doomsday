@@ -16,9 +16,16 @@ public interface LorebookEntryRepository extends JpaRepository<LorebookEntry, St
     @Query(value = """
             SELECT * FROM lorebook_entry
             WHERE body ILIKE CONCAT('%', :keyword, '%')
+              AND version = :worldVersion
             ORDER BY priority DESC
             LIMIT :topK
             """, nativeQuery = true)
-    List<LorebookEntry> findTopByKeyword(@Param("keyword") String keyword,
-                                          @Param("topK") int topK);
+    List<LorebookEntry> findTopByKeywordAndVersion(@Param("keyword") String keyword,
+                                                   @Param("worldVersion") String worldVersion,
+                                                   @Param("topK") int topK);
+
+    @Query(value = """
+            SELECT COUNT(1) FROM lorebook_entry WHERE version = :worldVersion
+            """, nativeQuery = true)
+    long countByWorldVersion(@Param("worldVersion") String worldVersion);
 }

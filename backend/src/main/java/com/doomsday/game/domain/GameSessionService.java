@@ -37,7 +37,7 @@ public class GameSessionService {
 
     public CreateSessionResponse createSession(CreateSessionRequest request) {
         String sessionId = "s_" + System.currentTimeMillis() + "_" + UUID.randomUUID().toString().substring(0, 6);
-        GameSession session = GameSession.create(sessionId, request.difficulty());
+        GameSession session = GameSession.create(sessionId, request.difficulty(), request.worldVersion());
         sessionRepo.save(session);
 
         return new CreateSessionResponse(
@@ -174,7 +174,8 @@ public class GameSessionService {
                 List.copyOf(s.getInventory()),
                 s.getChallengeIndex(),
                 s.getDifficulty().challengeBand(),
-                s.getTurn()
+                s.getTurn(),
+                s.getWorldVersion()
         );
     }
 

@@ -86,13 +86,14 @@ public class RetrievalAgent implements AgentHandler {
 
         // --- 2. JPA 事件卡（位置标签精确匹配）---
         String location = ctx.session.getLocation();
-        eventCardRepo.findTopByLocationTag(location, TOP_K)
+        String worldVersion = ctx.session.getWorldVersion();
+        eventCardRepo.findTopByLocationTagAndVersion(location, worldVersion, TOP_K)
                 .forEach(ec -> ctx.retrievedContexts.add(
                         new RetrievedContext("event_card", ec.getEventId(), ec.getTriggerJson(), 0.85)
                 ));
 
         // --- 3. Lorebook 混合召回（关键词 + 向量）并做评分融合 ---
-        List<RetrievedContext> lorebookResults = hybridLorebookRecall(ctx.playerInput, location, docs);
+        List<RetrievedContext> lorebookResults = hybridLorebookRecall(ctx.playerInput, location, worldVersion, docs);
         ctx.retrievedContexts.addAll(lorebookResults);
 
         ctx.retrievedContexts = rerankWithDiversity(ctx.retrievedContexts);
@@ -165,13 +166,13 @@ public class RetrievalAgent implements AgentHandler {
         return selected;
     }
 
-    private List<RetrievedContext> hybridLorebookRecall(String playerInput, String location, List<Document> vectorDocs) {
+    private List<RetrievedContext> hybridLorebookRecall(String playerInput, String location, String worldVersion, List<Document> vectorDocs) {
         Map<String, LorebookCandidate> merged = new HashMap<>();
 
         // 关键词召回（高精确）
-        List<LorebookEntry> keywordHits = lorebookRepo.findTopByKeyword(playerInput, TOP_K);
+        List<LorebookEntry> keywordHits = lorebookRepo.findTopByKeywordAndVersion(playerInput, worldVersion, TOP_K);
         if (keywordHits.isEmpty()) {
-            keywordHits = lorebookRepo.findTopByKeyword(location, TOP_K);
+            keywordHits = lorebookRepo.findTopByKeywordAndVersion(location, worldVersion, TOP_K);
         }
         for (int i = 0; i < keywordHits.size(); i++) {
             LorebookEntry hit = keywordHits.get(i);

@@ -16,9 +16,16 @@ public interface EventCardRepository extends JpaRepository<EventCard, String> {
     @Query(value = """
             SELECT * FROM event_card
             WHERE trigger_json->>'location' = :location
+              AND version = :worldVersion
             ORDER BY rarity DESC
             LIMIT :topK
             """, nativeQuery = true)
-    List<EventCard> findTopByLocationTag(@Param("location") String location,
-                                         @Param("topK") int topK);
+    List<EventCard> findTopByLocationTagAndVersion(@Param("location") String location,
+                                                   @Param("worldVersion") String worldVersion,
+                                                   @Param("topK") int topK);
+
+    @Query(value = """
+            SELECT COUNT(1) FROM event_card WHERE version = :worldVersion
+            """, nativeQuery = true)
+    long countByWorldVersion(@Param("worldVersion") String worldVersion);
 }

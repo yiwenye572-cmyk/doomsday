@@ -20,6 +20,7 @@ public class GameSession {
     private int stamina;
     private int infection;
     private String location;
+    private String worldVersion;
     private List<String> inventory;
     private int comebackCardRemaining;
     private double challengeIndex;
@@ -37,6 +38,7 @@ public class GameSession {
             @JsonProperty("stamina") int stamina,
             @JsonProperty("infection") int infection,
             @JsonProperty("location") String location,
+            @JsonProperty("worldVersion") String worldVersion,
             @JsonProperty("inventory") List<String> inventory,
             @JsonProperty("comebackCardRemaining") int comebackCardRemaining,
             @JsonProperty("challengeIndex") double challengeIndex,
@@ -50,6 +52,7 @@ public class GameSession {
         this.stamina = stamina;
         this.infection = infection;
         this.location = location;
+        this.worldVersion = (worldVersion == null || worldVersion.isBlank()) ? "world_v1" : worldVersion;
         this.inventory = inventory != null ? new ArrayList<>(inventory) : new ArrayList<>();
         this.comebackCardRemaining = comebackCardRemaining;
         this.challengeIndex = challengeIndex;
@@ -57,12 +60,13 @@ public class GameSession {
     }
 
     /** 新建会话工厂方法 */
-    public static GameSession create(String sessionId, Difficulty difficulty) {
+    public static GameSession create(String sessionId, Difficulty difficulty, String worldVersion) {
         return new GameSession(
                 sessionId, difficulty,
                 1L, 0, 0,
                 100, 100, 0,
                 "safe_house",
+                worldVersion,
                 new ArrayList<>(List.of("knife", "bandage")),
                 1, 0.5,
                 new ArrayList<>()
@@ -79,6 +83,7 @@ public class GameSession {
     public int getStamina() { return stamina; }
     public int getInfection() { return infection; }
     public String getLocation() { return location; }
+    public String getWorldVersion() { return worldVersion; }
     public List<String> getInventory() { return inventory; }
     public int getComebackCardRemaining() { return comebackCardRemaining; }
     public double getChallengeIndex() { return challengeIndex; }
@@ -92,6 +97,9 @@ public class GameSession {
     public void setStamina(int stamina) { this.stamina = stamina; }
     public void setInfection(int infection) { this.infection = infection; }
     public void setLocation(String location) { this.location = location; }
+    public void setWorldVersion(String worldVersion) {
+        this.worldVersion = (worldVersion == null || worldVersion.isBlank()) ? "world_v1" : worldVersion;
+    }
     public void setInventory(List<String> inventory) { this.inventory = inventory; }
     public void setComebackCardRemaining(int comebackCardRemaining) { this.comebackCardRemaining = comebackCardRemaining; }
     public void setChallengeIndex(double challengeIndex) { this.challengeIndex = challengeIndex; }

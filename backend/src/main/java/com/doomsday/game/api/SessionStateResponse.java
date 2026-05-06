@@ -12,5 +12,6 @@ public record SessionStateResponse(
         List<String> inventory,
         double challengeIndex,
         double[] challengeBand,
-        int turn
+        int turn,
+        String worldVersion
 ) {}

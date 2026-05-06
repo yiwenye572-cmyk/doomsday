@@ -129,7 +129,7 @@ public String queryGameState(String sessionId) { ... }
 ## 4. ⚠️ 需要你确认的问题
 
 1. **主力叙事模型**：用 `qwen-plus`（稳定，Spring AI 示例多）还是 `qwen3.6-plus`（最新，效果更好但较新）？
-2. **Embedding 模型**：保持 `text-embedding-v3`（1536 维，当前 schema 匹配）还是升级到 `text-embedding-v4`（需改维度）？
+2. **Embedding 模型**：保持 `text-embedding-v3`（1024 维，当前 schema 匹配）还是升级到 `text-embedding-v4`（需改维度）？
 3. **Router/Narration**：用 `qwen-turbo` 还是 `qwen3.6-flash`（更新的轻量模型）？
 4. **是否接入第三方模型**：如 `deepseek-v4-pro`（通过百炼调用，API 格式一致）？
 

@@ -4,6 +4,33 @@
 - 本文档覆盖 Vue3 前端与 Spring Boot 3 后端的联调接口。
 - 对齐计划书中的多 Agent 编排、动态难度、RAG 检索、状态一致性与可观测要求。
 
+## 1.1 重要 API 速览（当前对外主链路）
+
+### A. 游戏主链路（已实现）
+- `POST /api/v1/game/sessions`：创建会话
+- `GET /api/v1/game/sessions/{sessionId}/state`：查询状态
+- `POST /api/v1/game/sessions/{sessionId}/turns`：提交回合输入（核心）
+- `POST /api/v1/game/sessions/{sessionId}/turns/{turn}/choose`：提交选项选择
+- `POST /api/v1/game/sessions/{sessionId}/comeback-card`：触发翻盘卡
+
+### B. 可观测管理（已实现）
+- `GET /api/v1/admin/metrics/agents`：Agent 聚合指标（含阶段耗时/Token）
+- `GET /api/v1/admin/metrics/traces`：最近 Trace 列表
+- `GET /api/v1/admin/metrics/traces/{traceId}`：单条 Trace 详情
+
+### C. 多模态最小闭环（已实现）
+- `POST /api/v1/media/images/generate`：优先文生图，失败/超时自动回退图库
+- `GET /api/v1/media/images/gallery-search`：显式图库检索
+
+### D. 关键规划接口（规划中）
+- `POST /api/v1/admin/evals/jobs`：创建离线评测任务
+- `GET /api/v1/admin/evals/jobs/{jobId}`：查询评测任务结果
+
+### E. 关键联调约束（强烈建议）
+- 写接口统一带 `Idempotency-Key`。
+- 有状态写入统一传 `expectedVersion`（防并发覆盖）。
+- 前后端统一透传 `X-Trace-Id` 便于链路排障。
+
 ## 2. 基础约定
 
 ### 2.1 基础信息
@@ -573,6 +600,227 @@
     "provider": "pexels",
     "author": "John Doe",
     "license": "Pexels License"
+  }
+]
+```
+
+## 8.3 世界观预编译与冲突仲裁（已实现核心）
+
+### 8.3.1 创建世界观预编译任务
+- Method: `POST`
+- Path: `/admin/world-factory/jobs`
+- 说明：提交世界观原文后，启动离线预编译流水线（chunk/extract/tag/index）。
+
+请求体：
+```json
+{
+  "worldVersion": "world_v3",
+  "sourceType": "TEXT",
+  "content": "...世界观说明书全文...",
+  "forceRebuild": false
+}
+```
+
+响应 data：
+```json
+{
+  "jobId": "wf_job_20260506_001",
+  "status": "PENDING"
+}
+```
+
+### 8.3.2 查询预编译任务状态
+- Method: `GET`
+- Path: `/admin/world-factory/jobs/{jobId}`
+
+响应 data：
+```json
+{
+  "jobId": "wf_job_20260506_001",
+  "status": "RUNNING",
+  "progress": 72,
+  "stage": "tagging",
+  "errorMessage": null
+}
+```
+
+### 8.3.3 冲突仲裁（在线）
+- Method: `POST`
+- Path: `/admin/arbitration/evaluate`
+- 说明：按“规则校验 -> 语义对齐 -> 高风险投票（riskScore >= 0.7）”输出裁决结果。
+
+请求体：
+```json
+{
+  "sessionId": "s_20260501_001",
+  "candidateEventId": "ev_033_variant_b",
+  "riskScore": 0.76,
+  "stateSnapshot": {
+    "hp": 35,
+    "stamina": 28,
+    "infection": 42
+  }
+}
+```
+
+### 8.3.4 游戏世界初始化（已实现）
+- Method: `POST`
+- Path: `/game/worlds/initialize`
+- 说明：根据玩家输入的基础设定触发 AI 生成世界书并启动 WorldFactory 离线任务。
+
+请求体：
+```json
+{
+  "worldTheme": "极寒核冬天",
+  "eraStyle": "工业废土",
+  "survivalTone": "高压生存",
+  "keyFaction": "夜巡队",
+  "forbiddenRule": "高噪声动作不得连续两回合"
+}
+```
+
+响应 data：
+```json
+{
+  "worldVersion": "world_1778055039742",
+  "jobId": "wf_job_fcd2e9af4a7c",
+  "status": "RUNNING",
+  "message": "world factory job accepted"
+}
+```
+
+### 8.3.5 默认世界书（已实现）
+- Method: `GET`
+- Path: `/game/worlds/default`
+- 说明：玩家跳过创建世界时，前端应调用本接口获取默认世界版本并建局。
+
+响应 data：
+```json
+{
+  "worldVersion": "world_v1",
+  "title": "默认世界书",
+  "description": "玩家跳过创建时使用该默认世界书，保障开局可玩。"
+}
+```
+
+### 8.3.6 建局接口新增字段（已实现）
+- `POST /game/sessions`：入参 `worldVersion` 已生效。
+- `GET /game/sessions/{sessionId}/state`：响应新增 `worldVersion` 字段。
+
+响应 data：
+```json
+{
+  "pass": false,
+  "layerResult": {
+    "ruleValidation": "FAIL",
+    "semanticAlignment": "PASS",
+    "agentVoting": "REJECT"
+  },
+  "finalAction": "SWITCH_EVENT",
+  "suggestedEventId": "ev_033_variant_c",
+  "reason": "infection_too_high_for_event"
+}
+```
+
+## 8.4 游戏日记系统（规划中）
+
+### 8.4.1 查询会话日记
+- Method: `GET`
+- Path: `/game/sessions/{sessionId}/diary`
+- Query:
+  - `level`：`L0` | `L1` | `L2`
+  - `fromTurn`（可选）
+  - `toTurn`（可选）
+
+响应 data（L1 示例）：
+```json
+[
+  {
+    "sessionId": "s_20260501_001",
+    "level": "L1",
+    "turnRange": "21-30",
+    "summary": "你在油站区域完成两次高风险搜刮并建立临时补给点。",
+    "tags": ["gas_station", "resource", "high_risk"],
+    "createdAt": 1760001234567
+  }
+]
+```
+
+### 8.4.2 强制触发日记摘要
+- Method: `POST`
+- Path: `/admin/diary/force-summarize`
+
+请求体：
+```json
+{
+  "sessionId": "s_20260501_001",
+  "fromTurn": 21,
+  "toTurn": 30
+}
+```
+
+响应 data：
+```json
+{
+  "accepted": true,
+  "jobId": "diary_job_001",
+  "status": "PENDING"
+}
+```
+
+## 8.5 ReAct 标准化 Tool Calling（规划中）
+
+### 8.5.1 通用工具调用入口（内部编排使用）
+- Method: `POST`
+- Path: `/internal/tool/call`
+- 说明：由编排器调用，不对前端暴露。
+
+请求体：
+```json
+{
+  "idempotencyKey": "tool_1746500000_xxx",
+  "traceId": "trace_ab12cd34ef56",
+  "callerAgent": "PlotGenerationAgent",
+  "toolName": "WorldQueryTool",
+  "timeoutMs": 1200,
+  "payload": {
+    "query": "old_gas_station medical stash"
+  }
+}
+```
+
+响应 data：
+```json
+{
+  "toolName": "WorldQueryTool",
+  "status": "SUCCESS",
+  "retryCount": 1,
+  "latencyMs": 88,
+  "result": {
+    "hits": ["event_card:ev_033", "lorebook:lb_zone_7"]
+  },
+  "errorCode": null
+}
+```
+
+### 8.5.2 工具注册列表（管理端）
+- Method: `GET`
+- Path: `/admin/tools`
+
+响应 data：
+```json
+[
+  {
+    "toolName": "WorldQueryTool",
+    "enabled": true,
+    "version": "v1",
+    "sideEffect": false
+  },
+  {
+    "toolName": "EntityStatePatchTool",
+    "enabled": true,
+    "version": "v1",
+    "sideEffect": true
   }
 ]
 ```
