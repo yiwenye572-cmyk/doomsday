@@ -7,7 +7,9 @@ import com.doomsday.game.agent.TurnContext.RetrievedContext;
 import com.doomsday.game.api.PlotPayload;
 import com.doomsday.game.common.LlmTokenEstimator;
 import com.doomsday.game.domain.GameSession;
+import com.doomsday.game.tool.dto.ToolCallRequest;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -79,6 +81,32 @@ public class PlotGenerationAgent implements AgentHandler {
         next.handle(ctx);
     }
 
+    public List<ToolCallRequest> planToolCalls(TurnContext ctx) {
+        try {
+            ToolPlan plan = chatClient.prompt()
+                    .user(buildToolPlanPrompt(ctx))
+                    .call()
+                    .entity(ToolPlan.class);
+            List<ToolCallRequest> llmPlanned = plan == null || plan.toolCalls() == null
+                ? List.of()
+                : plan.toolCalls().stream()
+                    .limit(2)
+                    .filter(c -> c.toolName() != null && !c.toolName().isBlank())
+                    .map(c -> new ToolCallRequest(
+                            "tool_" + ctx.traceId + "_plot_" + c.toolName(),
+                            ctx.traceId,
+                            name(),
+                            c.toolName(),
+                            1200,
+                            c.payload() == null ? Map.of() : c.payload()
+                    ))
+                    .toList();
+            return mergePreferDistinct(llmPlanned, heuristicPlan(ctx));
+        } catch (Exception ex) {
+            return heuristicPlan(ctx);
+        }
+    }
+
     // ===== LLM 叙事生成 =====
 
     private String generateWithLlm(TurnContext ctx) {
@@ -129,6 +157,13 @@ public class PlotGenerationAgent implements AgentHandler {
             sb.append("\n");
         }
 
+        if (!ctx.toolCallResults.isEmpty()) {
+            sb.append("【工具观察（Tool Observation）】\n");
+            ctx.latestToolObservations(3)
+                .forEach(obs -> sb.append("- ").append(obs).append("\n"));
+            sb.append("\n");
+        }
+
         // 召回的世界观片段
         if (!ctx.retrievedContexts.isEmpty()) {
             sb.append("【背景参考资料（择要使用）】\n");
@@ -146,6 +181,70 @@ public class PlotGenerationAgent implements AgentHandler {
         sb.append("请生成本回合叙事：");
 
         return sb.toString();
+    }
+
+    private String buildToolPlanPrompt(TurnContext ctx) {
+        return """
+                你是 ReAct 工具规划器。请基于输入判断是否需要调用工具。
+                可用工具：WorldQueryTool, MemoryRecallTool, EntityStatePatchTool。
+                规则：
+                1) 仅返回 JSON，不要 markdown。
+                2) 最多 2 个工具。
+                3) 非必要时返回空数组。
+                4) EntityStatePatchTool 默认 dryRun=true。
+
+                输入：%s
+                意图：%s
+                位置：%s
+
+                返回格式：
+                {"toolCalls":[{"toolName":"WorldQueryTool","payload":{"query":"...","topK":3}}]}
+                """.formatted(
+                ctx.playerInput,
+                ctx.intent,
+                ctx.session.getLocation()
+        );
+    }
+
+    private List<ToolCallRequest> heuristicPlan(TurnContext ctx) {
+        String input = ctx.playerInput == null ? "" : ctx.playerInput;
+        if (input.contains("回忆") || input.contains("之前") || input.contains("上次")) {
+            return List.of(new ToolCallRequest(
+                    "tool_" + ctx.traceId + "_plot_memory",
+                    ctx.traceId,
+                    name(),
+                    "MemoryRecallTool",
+                    1200,
+                    Map.of("limit", 4, "includeEpisodic", true)
+            ));
+        }
+        if (input.contains("搜") || input.contains("探索") || input.contains("情报")) {
+            return List.of(new ToolCallRequest(
+                    "tool_" + ctx.traceId + "_plot_world",
+                    ctx.traceId,
+                    name(),
+                    "WorldQueryTool",
+                    1200,
+                    Map.of("query", input, "topK", 3)
+            ));
+        }
+        return List.of();
+    }
+
+    private List<ToolCallRequest> mergePreferDistinct(List<ToolCallRequest> primary, List<ToolCallRequest> fallback) {
+        List<ToolCallRequest> merged = new java.util.ArrayList<>();
+        if (primary != null) {
+            merged.addAll(primary);
+        }
+        if (fallback != null) {
+            for (ToolCallRequest item : fallback) {
+                boolean exists = merged.stream().anyMatch(x -> x.toolName().equals(item.toolName()));
+                if (!exists) {
+                    merged.add(item);
+                }
+            }
+        }
+        return merged.stream().limit(2).toList();
     }
 
     // ===== 模板降级 =====
@@ -173,5 +272,8 @@ public class PlotGenerationAgent implements AgentHandler {
         if (text == null || text.length() <= max) return text;
         return text.substring(0, max - 1) + "…";
     }
+
+    record ToolPlanCall(String toolName, Map<String, Object> payload) {}
+    record ToolPlan(List<ToolPlanCall> toolCalls) {}
 }
 

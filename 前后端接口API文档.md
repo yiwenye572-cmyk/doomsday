@@ -292,6 +292,62 @@
 
 ---
 
+## 3.7 游戏日记接口
+
+- Method: `GET`
+- Path: `/game/sessions/{sessionId}/diary`
+- Query params:
+  - `level` (required): `L0` | `L1` | `L2`
+  - `fromTurn` (optional): 起始回合（包含）
+  - `toTurn` (optional): 结束回合（包含）
+
+说明：按层级返回会话日记，L0 从 Redis 读取最近原始回合条目，L1/L2 从 PostgreSQL 读已沉淀摘要。
+
+响应 data（示例，L1）：
+```json
+{
+  "sessionId": "s_20260506_001",
+  "level": "L1",
+  "entries": [
+    {
+      "id": "l1_0001",
+      "turnRange": "1-3",
+      "summary": "团队在加油站搜刮医疗物资，遭遇轻微摩擦后撤离。",
+      "tags": ["scavenge","medical"],
+      "createdAt": 1760000001234
+    }
+  ]
+}
+```
+
+- Method: `POST`
+- Path: `/admin/diary/force-summarize`
+- 说明：管理员触发对指定会话或全局范围的 L0->L1 摘要沉淀，返回此次触发的统计结果。
+
+请求体（示例）：
+```json
+{
+  "sessionId": "s_20260506_001",
+  "fromTurn": 1,
+  "toTurn": 10
+}
+```
+
+响应（示例）：
+```json
+{
+  "sessionId": "s_20260506_001",
+  "l0Count": 3,
+  "l1CountBefore": 1,
+  "forceCreated": true,
+  "l1CountAfter": 2
+}
+```
+
+注意事项：
+- 日记查询为只读，不阻塞主游戏流程；若 L1/L2 查询量大，请考虑分页或限制时间范围。
+- L1 摘要可能由自动调度或管理员触发产生，摘要质量受模型与提示词影响，应纳入审计与人工回放验证流程。
+
 ## 4. 离线世界观工厂接口（管理端）
 
 > 状态：以下接口为规划项。注意：监控类管理接口已在第 5 节单独标注为“已实现”。
@@ -768,7 +824,7 @@
 }
 ```
 
-## 8.5 ReAct 标准化 Tool Calling（规划中）
+## 8.5 ReAct 标准化 Tool Calling（已实现）
 
 ### 8.5.1 通用工具调用入口（内部编排使用）
 - Method: `POST`
@@ -794,12 +850,19 @@
 {
   "toolName": "WorldQueryTool",
   "status": "SUCCESS",
-  "retryCount": 1,
-  "latencyMs": 88,
+  "retryCount": 0,
+  "latencyMs": 9,
   "result": {
-    "hits": ["event_card:ev_033", "lorebook:lb_zone_7"]
+    "worldVersion": "world_v1",
+    "query": "old_gas_station medical stash",
+    "hits": [
+      {"source": "event_card", "id": "ev_safe_house_knock", "snippet": "..."},
+      {"source": "event_card", "id": "ev_safe_house_generator", "snippet": "..."}
+    ]
   },
-  "errorCode": null
+  "errorCode": null,
+  "errorMessage": null,
+  "compensated": false
 }
 ```
 
@@ -812,15 +875,80 @@
 [
   {
     "toolName": "WorldQueryTool",
-    "enabled": true,
-    "version": "v1",
-    "sideEffect": false
+    "description": "查询当前世界版本下的事件卡与 lore 片段",
+    "sideEffect": false,
+    "requiredFields": ["query"]
   },
   {
     "toolName": "EntityStatePatchTool",
-    "enabled": true,
-    "version": "v1",
-    "sideEffect": true
+    "description": "对会话状态执行标准化 Patch（支持 dryRun）",
+    "sideEffect": true,
+    "requiredFields": []
+  },
+  {
+    "toolName": "MemoryRecallTool",
+    "description": "回溯 L0/L1 记忆片段供当前推理引用",
+    "sideEffect": false,
+    "requiredFields": []
+  }
+]
+```
+
+### 8.5.3 工具调用汇总（管理端）
+- Method: `GET`
+- Path: `/admin/tools/summary`
+- 说明：返回工具调用聚合统计，用于观察成功率、平均耗时与重试水平。
+
+响应 data（示例）：
+```json
+[
+  {
+    "toolName": "EntityStatePatchTool",
+    "totalCalls": 7,
+    "successCalls": 7,
+    "failedCalls": 0,
+    "avgMs": 1.0,
+    "avgRetry": 0.0
+  },
+  {
+    "toolName": "MemoryRecallTool",
+    "totalCalls": 1,
+    "successCalls": 1,
+    "failedCalls": 0,
+    "avgMs": 3.0,
+    "avgRetry": 0.0
+  },
+  {
+    "toolName": "WorldQueryTool",
+    "totalCalls": 3,
+    "successCalls": 3,
+    "failedCalls": 0,
+    "avgMs": 18.0,
+    "avgRetry": 0.0
+  }
+]
+```
+
+### 8.5.4 工具调用审计明细（管理端）
+- Method: `GET`
+- Path: `/admin/tools/audits`
+- Query:
+  - `limit`（可选，默认 20，最大 100）
+
+响应 data（示例）：
+```json
+[
+  {
+    "traceId": "trace_3d977d3547f3",
+    "sessionId": "s_1778061948123_1a1a67",
+    "callerAgent": "OptionGenerationAgent",
+    "toolName": "EntityStatePatchTool",
+    "status": "SUCCESS",
+    "retryCount": 0,
+    "latencyMs": 4,
+    "errorCode": "",
+    "compensated": false,
+    "createdAt": "2026-05-06T10:05:59.766039Z"
   }
 ]
 ```

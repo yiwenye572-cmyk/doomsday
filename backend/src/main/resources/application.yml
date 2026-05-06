@@ -75,6 +75,8 @@ management:
 game:
   chaos:
     enabled: false
+  tool:
+    max-retries: 1
   diary:
     summary:
       every-turns: 3

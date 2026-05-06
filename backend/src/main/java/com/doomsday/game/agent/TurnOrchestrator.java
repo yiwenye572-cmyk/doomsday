@@ -18,9 +18,14 @@ import com.doomsday.game.diary.GameDiaryService;
 import com.doomsday.game.domain.GameSession;
 import com.doomsday.game.domain.SessionRepository;
 import com.doomsday.game.domain.TurnMemory;
+import com.doomsday.game.tool.ToolContext;
+import com.doomsday.game.tool.ToolExecutor;
+import com.doomsday.game.tool.dto.ToolCallRequest;
+import com.doomsday.game.tool.dto.ToolCallResult;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
 import org.slf4j.Logger;
@@ -39,11 +44,15 @@ public class TurnOrchestrator {
     private static final Logger log = LoggerFactory.getLogger(TurnOrchestrator.class);
 
     private final SessionRepository sessionRepo;
-    private final List<AgentHandler> preCommitPipeline;
+    private final List<AgentHandler> preReActPipeline;
+    private final List<AgentHandler> postPlotPipeline;
     private final List<AgentHandler> postCommitPipeline;
     private final AgentMetricsStore metricsStore;
     private final ConflictArbitrator conflictArbitrator;
     private final GameDiaryService gameDiaryService;
+    private final PlotGenerationAgent plotAgent;
+    private final OptionGenerationAgent optionAgent;
+    private final ToolExecutor toolExecutor;
 
     public TurnOrchestrator(
             RouterAgent router,
@@ -57,16 +66,17 @@ public class TurnOrchestrator {
             SessionRepository sessionRepo,
             AgentMetricsStore metricsStore,
             ConflictArbitrator conflictArbitrator,
-            GameDiaryService gameDiaryService) {
+            GameDiaryService gameDiaryService,
+            ToolExecutor toolExecutor) {
         this.sessionRepo = sessionRepo;
         this.metricsStore = metricsStore;
         this.conflictArbitrator = conflictArbitrator;
         this.gameDiaryService = gameDiaryService;
-        // 前半段：直到 RuleGuard 完成校验，由 Orchestrator 做仲裁。
-        this.preCommitPipeline = List.of(
-                router, retrieval, difficultyDirector,
-                plot, option, ruleGuard
-        );
+        this.plotAgent = plot;
+        this.optionAgent = option;
+        this.toolExecutor = toolExecutor;
+        this.preReActPipeline = List.of(router, retrieval, difficultyDirector);
+        this.postPlotPipeline = List.of(option, ruleGuard);
         this.postCommitPipeline = List.of(stateCommit, narration);
     }
 
@@ -87,7 +97,29 @@ public class TurnOrchestrator {
         log.info("[Orchestrator] START sessionId={} turn={} traceId={}", sessionId, session.getTurn() + 1, traceId);
         long t0 = System.currentTimeMillis();
 
-        new AgentChain(preCommitPipeline).handle(ctx);
+        new AgentChain(preReActPipeline).handle(ctx);
+
+        if (!ctx.aborted) {
+            List<ToolCallRequest> plotRequests = new ArrayList<>(plotAgent.planToolCalls(ctx));
+            if (shouldForceMemoryRecall(ctx)
+                    && plotRequests.stream().noneMatch(r -> "MemoryRecallTool".equals(r.toolName()))) {
+                plotRequests.add(new ToolCallRequest(
+                        "tool_" + ctx.traceId + "_forced_memory",
+                        ctx.traceId,
+                        "TurnOrchestrator",
+                        "MemoryRecallTool",
+                        1200,
+                        Map.of("limit", 4, "includeEpisodic", true)
+                ));
+            }
+            executeToolCalls(ctx, plotRequests, "PlotPlanning");
+            new AgentChain(List.of(plotAgent)).handle(ctx);
+        }
+
+        if (!ctx.aborted) {
+            executeToolCalls(ctx, optionAgent.planToolCalls(ctx), "OptionPlanning");
+            new AgentChain(postPlotPipeline).handle(ctx);
+        }
 
         if (!ctx.rulesPassed) {
             if (canFallback(ctx.violations)) {
@@ -185,6 +217,50 @@ public class TurnOrchestrator {
         );
         sessionRepo.appendTurnMemory(ctx.sessionId, memory);
         sessionRepo.appendEpisodicSummary(ctx.sessionId, buildEpisodicSummary(ctx, narration));
+    }
+
+    private void executeToolCalls(TurnContext ctx, List<ToolCallRequest> requests, String stage) {
+        if (requests == null || requests.isEmpty()) {
+            return;
+        }
+        for (ToolCallRequest request : requests) {
+            ToolCallResult result = toolExecutor.execute(
+                    new ToolContext(ctx.sessionId, ctx.traceId, request.callerAgent(), ctx.session, ctx),
+                    request
+            );
+            ctx.addToolResult(result);
+            if (!result.success()) {
+                log.warn("[Orchestrator] tool failed traceId={} stage={} tool={} error={}",
+                        ctx.traceId,
+                        stage,
+                        request.toolName(),
+                        result.errorMessage());
+                continue;
+            }
+            String observation = formatObservation(result);
+            ctx.retrievedContexts.add(new TurnContext.RetrievedContext(
+                    "tool_obs",
+                    result.toolName(),
+                    observation,
+                    0.72
+            ));
+        }
+    }
+
+    private String formatObservation(ToolCallResult result) {
+        if (result.result() == null || result.result().isEmpty()) {
+            return result.toolName() + " returned empty";
+        }
+        String raw = result.result().toString();
+        if (raw.length() > 140) {
+            raw = raw.substring(0, 139) + "...";
+        }
+        return result.toolName() + ": " + raw;
+    }
+
+    private boolean shouldForceMemoryRecall(TurnContext ctx) {
+        String input = ctx.playerInput == null ? "" : ctx.playerInput;
+        return input.contains("回忆") || input.contains("之前") || input.contains("上次");
     }
 
     private boolean canFallback(List<String> violations) {

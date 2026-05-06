@@ -5,7 +5,9 @@ import com.doomsday.game.agent.AgentHandler;
 import com.doomsday.game.agent.TurnContext;
 import com.doomsday.game.api.OptionPayload;
 import com.doomsday.game.common.LlmTokenEstimator;
+import com.doomsday.game.tool.dto.ToolCallRequest;
 import java.util.List;
+import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.ai.chat.client.ChatClient;
@@ -71,14 +73,44 @@ public class OptionGenerationAgent implements AgentHandler {
         next.handle(ctx);
     }
 
+    public List<ToolCallRequest> planToolCalls(TurnContext ctx) {
+        try {
+            ToolPlan plan = chatClient.prompt()
+                    .user(buildToolPlanPrompt(ctx))
+                    .call()
+                    .entity(ToolPlan.class);
+            List<ToolCallRequest> llmPlanned = plan == null || plan.toolCalls() == null
+                ? List.of()
+                : plan.toolCalls().stream()
+                    .limit(2)
+                    .filter(c -> c.toolName() != null && !c.toolName().isBlank())
+                    .map(c -> new ToolCallRequest(
+                            "tool_" + ctx.traceId + "_option_" + c.toolName(),
+                            ctx.traceId,
+                            name(),
+                            c.toolName(),
+                            1200,
+                            c.payload() == null ? Map.of() : c.payload()
+                    ))
+                    .toList();
+            return mergePreferDistinct(llmPlanned, heuristicPlan(ctx));
+        } catch (Exception ex) {
+            return heuristicPlan(ctx);
+        }
+    }
+
     // ===== LLM 生成 =====
 
     private OptionsWrapper generateWithLlm(TurnContext ctx) {
+        String toolObs = ctx.latestToolObservations(3).isEmpty()
+            ? "无"
+            : String.join("; ", ctx.latestToolObservations(3));
         String userPrompt = """
                 【当前位置】%s
                 【玩家行动】%s
                 【剧情摘要】%s
                 【玩家状态】HP=%d 体力=%d 感染=%d
+            【工具观察】%s
                 
                 请生成 4 个选项 JSON：
                 """.formatted(
@@ -87,7 +119,8 @@ public class OptionGenerationAgent implements AgentHandler {
                 ctx.plot != null ? shorten(ctx.plot.text(), 120) : "（无）",
                 ctx.session.getHp(),
                 ctx.session.getStamina(),
-                ctx.session.getInfection()
+            ctx.session.getInfection(),
+            toolObs
         );
 
             long llmStart = System.nanoTime();
@@ -125,8 +158,71 @@ public class OptionGenerationAgent implements AgentHandler {
         return text.substring(0, max - 1) + "…";
     }
 
+    private String buildToolPlanPrompt(TurnContext ctx) {
+        return """
+                你是 ReAct 工具规划器。请判断生成选项前是否需要工具调用。
+                可用工具：WorldQueryTool, MemoryRecallTool, EntityStatePatchTool。
+                仅返回 JSON，最多 2 个工具。
+                若调用 EntityStatePatchTool 必须带 dryRun=true。
+
+                输入：%s
+                意图：%s
+                剧情摘要：%s
+
+                返回：
+                {"toolCalls":[{"toolName":"EntityStatePatchTool","payload":{"dryRun":true,"staminaDelta":-2}}]}
+                """.formatted(
+                ctx.playerInput,
+                ctx.intent,
+                ctx.plot == null ? "无" : shorten(ctx.plot.text(), 90)
+        );
+    }
+
+    private List<ToolCallRequest> heuristicPlan(TurnContext ctx) {
+        String intent = ctx.intent == null ? "" : ctx.intent;
+        if ("COMBAT".equals(intent)) {
+            return List.of(new ToolCallRequest(
+                    "tool_" + ctx.traceId + "_option_patch",
+                    ctx.traceId,
+                    name(),
+                    "EntityStatePatchTool",
+                    1200,
+                    Map.of("dryRun", true, "staminaDelta", -6)
+            ));
+        }
+        if ("RULE_QUERY".equals(intent)) {
+            return List.of(new ToolCallRequest(
+                    "tool_" + ctx.traceId + "_option_memory",
+                    ctx.traceId,
+                    name(),
+                    "MemoryRecallTool",
+                    1200,
+                    Map.of("limit", 3, "includeEpisodic", true)
+            ));
+        }
+        return List.of();
+    }
+
+    private List<ToolCallRequest> mergePreferDistinct(List<ToolCallRequest> primary, List<ToolCallRequest> fallback) {
+        List<ToolCallRequest> merged = new java.util.ArrayList<>();
+        if (primary != null) {
+            merged.addAll(primary);
+        }
+        if (fallback != null) {
+            for (ToolCallRequest item : fallback) {
+                boolean exists = merged.stream().anyMatch(x -> x.toolName().equals(item.toolName()));
+                if (!exists) {
+                    merged.add(item);
+                }
+            }
+        }
+        return merged.stream().limit(2).toList();
+    }
+
     /** Spring AI BeanOutputConverter 反序列化目标 */
     record OptionItem(String id, String text, String riskLevel, String expectedEffect) {}
     record OptionsWrapper(List<OptionItem> options) {}
+    record ToolPlanCall(String toolName, Map<String, Object> payload) {}
+    record ToolPlan(List<ToolPlanCall> toolCalls) {}
 }
 
