@@ -75,6 +75,12 @@ management:
 game:
   chaos:
     enabled: false
+  diary:
+    summary:
+      every-turns: 3
+      scheduler-enabled: true
+      fixed-delay-ms: 60000
+      sweep-limit: 50
   media:
     image:
       timeout-ms: 3000

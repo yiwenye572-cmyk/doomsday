@@ -1,8 +1,10 @@
 import { computed, onMounted, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { chooseOption, getSessionState, submitTurn, useComebackCard } from "../api/game";
+import { getDiary } from "../api/diary";
 import { generateImage, gallerySearch } from "../api/media";
 import ActionInput from "../components/game/ActionInput.vue";
+import DiaryPanel from "../components/game/DiaryPanel.vue";
 import NarrativePanel from "../components/game/NarrativePanel.vue";
 import OptionsGrid from "../components/game/OptionsGrid.vue";
 import StatusPanel from "../components/game/StatusPanel.vue";
@@ -13,6 +15,10 @@ const state = ref(null);
 const plot = ref(null);
 const image = ref(null);
 const options = ref([]);
+const diaryEntries = ref([]);
+const diaryLoading = ref(false);
+const diaryError = ref("");
+const diaryLevel = ref("L0");
 const loading = ref(false);
 const pendingAction = ref(false);
 const notice = ref("");
@@ -22,6 +28,24 @@ async function refreshState() {
         return;
     }
     state.value = await getSessionState(sessionId.value);
+}
+async function refreshDiary(level = diaryLevel.value) {
+    if (!sessionId.value) {
+        return;
+    }
+    diaryLevel.value = level;
+    diaryLoading.value = true;
+    diaryError.value = "";
+    try {
+        diaryEntries.value = await getDiary(sessionId.value, level);
+    }
+    catch (e) {
+        diaryEntries.value = [];
+        diaryError.value = e instanceof Error ? e.message : "日记加载失败";
+    }
+    finally {
+        diaryLoading.value = false;
+    }
 }
 async function handleSubmit(input) {
     if (!state.value || pendingAction.value) {
@@ -40,6 +64,7 @@ async function handleSubmit(input) {
         fetchImageForPlot(data.plot).catch(() => { });
         options.value = data.options;
         await refreshState();
+        await refreshDiary();
     }
     catch (e) {
         await handleError(e);
@@ -61,6 +86,7 @@ async function handleChoose(optionId) {
             optionId,
         });
         await refreshState();
+        await refreshDiary();
         await fetchImageForPlot(plot.value);
     }
     catch (e) {
@@ -102,6 +128,7 @@ async function handleComeback() {
         });
         notice.value = result.applied ? "翻盘卡已生效" : "翻盘卡未生效";
         await refreshState();
+        await refreshDiary();
     }
     catch (e) {
         await handleError(e);
@@ -122,6 +149,7 @@ async function init() {
     notice.value = "";
     try {
         await refreshState();
+        await refreshDiary("L0");
     }
     catch (e) {
         notice.value = e instanceof Error ? e.message : "状态加载失败";
@@ -244,14 +272,35 @@ if (!__VLS_ctx.loading) {
         onChoose: (__VLS_ctx.handleChoose)
     };
     var __VLS_17;
-    /** @type {[typeof StatusPanel, ]} */ ;
+    /** @type {[typeof DiaryPanel, ]} */ ;
     // @ts-ignore
-    const __VLS_22 = __VLS_asFunctionalComponent(StatusPanel, new StatusPanel({
-        state: (__VLS_ctx.state),
+    const __VLS_22 = __VLS_asFunctionalComponent(DiaryPanel, new DiaryPanel({
+        ...{ 'onRefresh': {} },
+        loading: (__VLS_ctx.diaryLoading),
+        entries: (__VLS_ctx.diaryEntries),
+        error: (__VLS_ctx.diaryError),
     }));
     const __VLS_23 = __VLS_22({
-        state: (__VLS_ctx.state),
+        ...{ 'onRefresh': {} },
+        loading: (__VLS_ctx.diaryLoading),
+        entries: (__VLS_ctx.diaryEntries),
+        error: (__VLS_ctx.diaryError),
     }, ...__VLS_functionalComponentArgsRest(__VLS_22));
+    let __VLS_25;
+    let __VLS_26;
+    let __VLS_27;
+    const __VLS_28 = {
+        onRefresh: (__VLS_ctx.refreshDiary)
+    };
+    var __VLS_24;
+    /** @type {[typeof StatusPanel, ]} */ ;
+    // @ts-ignore
+    const __VLS_29 = __VLS_asFunctionalComponent(StatusPanel, new StatusPanel({
+        state: (__VLS_ctx.state),
+    }));
+    const __VLS_30 = __VLS_29({
+        state: (__VLS_ctx.state),
+    }, ...__VLS_functionalComponentArgsRest(__VLS_29));
 }
 else {
     __VLS_asFunctionalElement(__VLS_intrinsicElements.section, __VLS_intrinsicElements.section)({
@@ -291,6 +340,7 @@ const __VLS_self = (await import('vue')).defineComponent({
     setup() {
         return {
             ActionInput: ActionInput,
+            DiaryPanel: DiaryPanel,
             NarrativePanel: NarrativePanel,
             OptionsGrid: OptionsGrid,
             StatusPanel: StatusPanel,
@@ -299,10 +349,14 @@ const __VLS_self = (await import('vue')).defineComponent({
             plot: plot,
             image: image,
             options: options,
+            diaryEntries: diaryEntries,
+            diaryLoading: diaryLoading,
+            diaryError: diaryError,
             loading: loading,
             pendingAction: pendingAction,
             notice: notice,
             headline: headline,
+            refreshDiary: refreshDiary,
             handleSubmit: handleSubmit,
             handleChoose: handleChoose,
             handleComeback: handleComeback,

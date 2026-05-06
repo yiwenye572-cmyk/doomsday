@@ -2,9 +2,11 @@
 import { computed, onMounted, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { chooseOption, getSessionState, submitTurn, useComebackCard } from "../api/game";
+import { getDiary } from "../api/diary";
 import { generateImage, gallerySearch } from "../api/media";
-import type { OptionPayload, PlotPayload, SessionState, GenerateImageResponse, GalleryImageItem } from "../types/api";
+import type { OptionPayload, PlotPayload, SessionState, GenerateImageResponse, GalleryImageItem, DiaryEntryView, DiaryLevel } from "../types/api";
 import ActionInput from "../components/game/ActionInput.vue";
+import DiaryPanel from "../components/game/DiaryPanel.vue";
 import NarrativePanel from "../components/game/NarrativePanel.vue";
 import OptionsGrid from "../components/game/OptionsGrid.vue";
 import StatusPanel from "../components/game/StatusPanel.vue";
@@ -18,6 +20,10 @@ const state = ref<SessionState | null>(null);
 const plot = ref<PlotPayload | null>(null);
 const image = ref<GenerateImageResponse | GalleryImageItem | null>(null);
 const options = ref<OptionPayload[]>([]);
+const diaryEntries = ref<DiaryEntryView[]>([]);
+const diaryLoading = ref(false);
+const diaryError = ref("");
+const diaryLevel = ref<DiaryLevel>("L0");
 const loading = ref(false);
 const pendingAction = ref(false);
 const notice = ref("");
@@ -29,6 +35,23 @@ async function refreshState() {
     return;
   }
   state.value = await getSessionState(sessionId.value);
+}
+
+async function refreshDiary(level: DiaryLevel = diaryLevel.value) {
+  if (!sessionId.value) {
+    return;
+  }
+  diaryLevel.value = level;
+  diaryLoading.value = true;
+  diaryError.value = "";
+  try {
+    diaryEntries.value = await getDiary(sessionId.value, level);
+  } catch (e) {
+    diaryEntries.value = [];
+    diaryError.value = e instanceof Error ? e.message : "日记加载失败";
+  } finally {
+    diaryLoading.value = false;
+  }
 }
 
 async function handleSubmit(input: string) {
@@ -48,6 +71,7 @@ async function handleSubmit(input: string) {
     fetchImageForPlot(data.plot).catch(() => {});
     options.value = data.options;
     await refreshState();
+    await refreshDiary();
   } catch (e) {
     await handleError(e);
   } finally {
@@ -68,6 +92,7 @@ async function handleChoose(optionId: string) {
       optionId,
     });
     await refreshState();
+    await refreshDiary();
     await fetchImageForPlot(plot.value);
   } catch (e) {
     await handleError(e);
@@ -106,6 +131,7 @@ async function handleComeback() {
     });
     notice.value = result.applied ? "翻盘卡已生效" : "翻盘卡未生效";
     await refreshState();
+    await refreshDiary();
   } catch (e) {
     await handleError(e);
   } finally {
@@ -126,6 +152,7 @@ async function init() {
   notice.value = "";
   try {
     await refreshState();
+    await refreshDiary("L0");
   } catch (e) {
     notice.value = e instanceof Error ? e.message : "状态加载失败";
   } finally {
@@ -163,6 +190,7 @@ onMounted(init);
         <NarrativePanel :plot="plot" :image="image" @regenerate="onRegenerate" />
         <ActionInput :loading="pendingAction" @submit="handleSubmit" @comeback="handleComeback" />
         <OptionsGrid :options="options" :loading="pendingAction" @choose="handleChoose" />
+        <DiaryPanel :loading="diaryLoading" :entries="diaryEntries" :error="diaryError" @refresh="refreshDiary" />
       </div>
       <StatusPanel :state="state" />
     </section>

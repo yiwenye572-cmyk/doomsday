@@ -14,6 +14,7 @@ import com.doomsday.game.api.PlotPayload;
 import com.doomsday.game.arbitration.ConflictArbitrator;
 import com.doomsday.game.arbitration.dto.ArbitrationResult;
 import com.doomsday.game.common.ApiException;
+import com.doomsday.game.diary.GameDiaryService;
 import com.doomsday.game.domain.GameSession;
 import com.doomsday.game.domain.SessionRepository;
 import com.doomsday.game.domain.TurnMemory;
@@ -42,6 +43,7 @@ public class TurnOrchestrator {
     private final List<AgentHandler> postCommitPipeline;
     private final AgentMetricsStore metricsStore;
     private final ConflictArbitrator conflictArbitrator;
+    private final GameDiaryService gameDiaryService;
 
     public TurnOrchestrator(
             RouterAgent router,
@@ -54,10 +56,12 @@ public class TurnOrchestrator {
             NarrationAgent narration,
             SessionRepository sessionRepo,
             AgentMetricsStore metricsStore,
-            ConflictArbitrator conflictArbitrator) {
+            ConflictArbitrator conflictArbitrator,
+            GameDiaryService gameDiaryService) {
         this.sessionRepo = sessionRepo;
         this.metricsStore = metricsStore;
         this.conflictArbitrator = conflictArbitrator;
+        this.gameDiaryService = gameDiaryService;
         // 前半段：直到 RuleGuard 完成校验，由 Orchestrator 做仲裁。
         this.preCommitPipeline = List.of(
                 router, retrieval, difficultyDirector,
@@ -119,6 +123,7 @@ public class TurnOrchestrator {
         }
 
         appendRollingMemory(ctx);
+        gameDiaryService.maybeSummarizeByTurn(ctx.sessionId);
 
         log.info("[Orchestrator] DONE traceId={} turn={} v={} elapsed={}ms",
                 traceId, session.getTurn(), session.getVersion(), elapsed);

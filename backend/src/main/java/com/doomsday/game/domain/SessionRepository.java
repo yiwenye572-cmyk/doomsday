@@ -1,6 +1,7 @@
 package com.doomsday.game.domain;
 
 import com.doomsday.game.api.SubmitTurnResponse;
+import com.doomsday.game.diary.SessionIndexProvider;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.time.Duration;
 import java.util.ArrayList;
@@ -16,12 +17,13 @@ import org.springframework.stereotype.Repository;
  *   - L0记忆：game:memory:{sessionId}        列表保留最近 N 条
  */
 @Repository
-public class SessionRepository {
+public class SessionRepository implements SessionIndexProvider {
 
     private static final String SESSION_PREFIX = "game:session:";
     private static final String IDEM_PREFIX = "game:idem:";
     private static final String MEMORY_PREFIX = "game:memory:";
     private static final String EPISODIC_PREFIX = "game:memory:l1:";
+    private static final String SESSION_INDEX_KEY = "game:session:index";
     private static final Duration SESSION_TTL = Duration.ofHours(24);
     private static final int MEMORY_WINDOW = 6;
     private static final int EPISODIC_WINDOW = 20;
@@ -41,6 +43,8 @@ public class SessionRepository {
             String key = SESSION_PREFIX + session.getSessionId();
             String json = objectMapper.writeValueAsString(session);
             redis.opsForValue().set(key, json, SESSION_TTL);
+            redis.opsForZSet().add(SESSION_INDEX_KEY, session.getSessionId(), System.currentTimeMillis());
+            redis.expire(SESSION_INDEX_KEY, SESSION_TTL);
         } catch (Exception e) {
             throw new RuntimeException("failed to save session: " + session.getSessionId(), e);
         }
@@ -133,5 +137,15 @@ public class SessionRepository {
             return List.of();
         }
         return rows.stream().filter(s -> s != null && !s.isBlank()).toList();
+    }
+
+    @Override
+    public List<String> findRecentSessionIds(int limit) {
+        int n = Math.max(1, limit);
+        var set = redis.opsForZSet().reverseRange(SESSION_INDEX_KEY, 0, n - 1);
+        if (set == null || set.isEmpty()) {
+            return List.of();
+        }
+        return new ArrayList<>(set);
     }
 }

@@ -24,6 +24,7 @@ export interface SessionState {
   challengeIndex: number;
   challengeBand: number[];
   turn: number;
+  worldVersion: string;
 }
 
 export interface CreateSessionResponse {
@@ -119,4 +120,15 @@ export interface GalleryImageItem {
   provider: string;
   author?: string;
   license?: string;
+}
+
+export type DiaryLevel = "L0" | "L1" | "L2";
+
+export interface DiaryEntryView {
+  level: DiaryLevel;
+  fromTurn: number;
+  toTurn: number;
+  summary: string;
+  tags: string[];
+  timestamp: number;
 }
