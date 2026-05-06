@@ -22,6 +22,11 @@ const router = createRouter({
             name: "admin",
             component: () => import("../pages/AdminPage.vue"),
         },
+        {
+            path: "/world-factory",
+            name: "world-factory",
+            component: () => import("../pages/WorldFactoryPage.vue"),
+        },
     ],
 });
 export default router;

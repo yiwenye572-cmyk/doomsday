@@ -132,3 +132,34 @@ export interface DiaryEntryView {
   tags: string[];
   timestamp: number;
 }
+
+export interface GameWorldInitRequest {
+  worldTheme: string;
+  eraStyle: string;
+  survivalTone: string;
+  keyFaction?: string;
+  forbiddenRule?: string;
+}
+
+export interface GameWorldInitResponse {
+  worldVersion: string;
+  jobId: string;
+  status: string;
+  message: string;
+}
+
+export interface DefaultWorldResponse {
+  worldVersion: string;
+  title: string;
+  description: string;
+}
+
+export interface WorldFactoryJobResponse {
+  jobId: string;
+  worldVersion: string;
+  sourceType: string;
+  status: string;
+  progress: number;
+  stage: string;
+  errorMessage: string;
+}

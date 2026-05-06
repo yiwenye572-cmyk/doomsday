@@ -2,6 +2,7 @@
 import { reactive, ref } from "vue";
 import { useRouter } from "vue-router";
 import { createSession } from "../api/game";
+import { getDefaultWorld } from "../api/world";
 import type { CreateSessionRequest } from "../types/api";
 
 const router = useRouter();
@@ -20,6 +21,26 @@ const difficultyOptions: Array<{ value: CreateSessionRequest["difficulty"]; titl
   { value: "SURVIVOR", title: "幸存", desc: "标准废土体验，风险与收益均衡。" },
   { value: "HELL", title: "地狱", desc: "资源稀缺且高压频发，容错极低。" },
 ];
+
+async function loadWorldVersion() {
+  const preferred = localStorage.getItem("doomsday:preferredWorldVersion");
+  if (preferred && preferred.trim().length > 0) {
+    form.worldVersion = preferred.trim();
+    return;
+  }
+  try {
+    const data = await getDefaultWorld();
+    form.worldVersion = data.worldVersion;
+  } catch {
+    form.worldVersion = "world_v1";
+  }
+}
+
+function goWorldFactory() {
+  router.push("/world-factory");
+}
+
+loadWorldVersion().catch(() => {});
 
 async function startGame() {
   if (loading.value) {
@@ -70,7 +91,13 @@ async function startGame() {
         </button>
       </div>
 
+      <label class="field">
+        <span>世界版本（可在世界工厂中生成）</span>
+        <input class="input" v-model="form.worldVersion" maxlength="64" />
+      </label>
+
       <div class="actions">
+        <button class="btn" @click="goWorldFactory">世界工厂</button>
         <button class="btn btn--accent" @click="startGame" :disabled="loading">
           {{ loading ? "创建中..." : "进入游戏" }}
         </button>

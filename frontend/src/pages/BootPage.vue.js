@@ -1,6 +1,7 @@
 import { reactive, ref } from "vue";
 import { useRouter } from "vue-router";
 import { createSession } from "../api/game";
+import { getDefaultWorld } from "../api/world";
 const router = useRouter();
 const loading = ref(false);
 const error = ref("");
@@ -15,6 +16,24 @@ const difficultyOptions = [
     { value: "SURVIVOR", title: "幸存", desc: "标准废土体验，风险与收益均衡。" },
     { value: "HELL", title: "地狱", desc: "资源稀缺且高压频发，容错极低。" },
 ];
+async function loadWorldVersion() {
+    const preferred = localStorage.getItem("doomsday:preferredWorldVersion");
+    if (preferred && preferred.trim().length > 0) {
+        form.worldVersion = preferred.trim();
+        return;
+    }
+    try {
+        const data = await getDefaultWorld();
+        form.worldVersion = data.worldVersion;
+    }
+    catch {
+        form.worldVersion = "world_v1";
+    }
+}
+function goWorldFactory() {
+    router.push("/world-factory");
+}
+loadWorldVersion().catch(() => { });
 async function startGame() {
     if (loading.value) {
         return;
@@ -88,8 +107,21 @@ for (const [item] of __VLS_getVForSourceType((__VLS_ctx.difficultyOptions))) {
     __VLS_asFunctionalElement(__VLS_intrinsicElements.p, __VLS_intrinsicElements.p)({});
     (item.desc);
 }
+__VLS_asFunctionalElement(__VLS_intrinsicElements.label, __VLS_intrinsicElements.label)({
+    ...{ class: "field" },
+});
+__VLS_asFunctionalElement(__VLS_intrinsicElements.span, __VLS_intrinsicElements.span)({});
+__VLS_asFunctionalElement(__VLS_intrinsicElements.input)({
+    ...{ class: "input" },
+    maxlength: "64",
+});
+(__VLS_ctx.form.worldVersion);
 __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
     ...{ class: "actions" },
+});
+__VLS_asFunctionalElement(__VLS_intrinsicElements.button, __VLS_intrinsicElements.button)({
+    ...{ onClick: (__VLS_ctx.goWorldFactory) },
+    ...{ class: "btn" },
 });
 __VLS_asFunctionalElement(__VLS_intrinsicElements.button, __VLS_intrinsicElements.button)({
     ...{ onClick: (__VLS_ctx.startGame) },
@@ -115,7 +147,10 @@ if (__VLS_ctx.error) {
 /** @type {__VLS_StyleScopedClasses['input']} */ ;
 /** @type {__VLS_StyleScopedClasses['difficulty-grid']} */ ;
 /** @type {__VLS_StyleScopedClasses['difficulty-card']} */ ;
+/** @type {__VLS_StyleScopedClasses['field']} */ ;
+/** @type {__VLS_StyleScopedClasses['input']} */ ;
 /** @type {__VLS_StyleScopedClasses['actions']} */ ;
+/** @type {__VLS_StyleScopedClasses['btn']} */ ;
 /** @type {__VLS_StyleScopedClasses['btn']} */ ;
 /** @type {__VLS_StyleScopedClasses['btn--accent']} */ ;
 /** @type {__VLS_StyleScopedClasses['error']} */ ;
@@ -127,6 +162,7 @@ const __VLS_self = (await import('vue')).defineComponent({
             error: error,
             form: form,
             difficultyOptions: difficultyOptions,
+            goWorldFactory: goWorldFactory,
             startGame: startGame,
         };
     },
