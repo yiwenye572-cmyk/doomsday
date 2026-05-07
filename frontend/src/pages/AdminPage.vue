@@ -1,25 +1,97 @@
 <script setup lang="ts">
-import { onMounted, ref } from "vue";
-import { getAgentMetrics, getRecentTraces } from "../api/admin";
-import type { AgentMetricsSummary, TraceDetail } from "../api/admin";
+import { computed, onMounted, onUnmounted, ref } from "vue";
+import { getAgentMetrics, getRecentTraces, getToolSummary, getToolAudits } from "../api/admin";
+import type { AgentMetricsSummary, TraceDetail, ToolSummary, ToolAuditItem } from "../api/admin";
+import http from "../api/http";
+import type { ApiResponse } from "../types/api";
 
 const metrics = ref<AgentMetricsSummary[]>([]);
 const traces = ref<TraceDetail[]>([]);
+const toolSummary = ref<ToolSummary[]>([]);
+const toolAudits = ref<ToolAuditItem[]>([]);
 const selectedTrace = ref<TraceDetail | null>(null);
 const loading = ref(false);
 const error = ref("");
+
+// Diary 操作
+const diarySessionId = ref("");
+const diaryFromTurn = ref(1);
+const diaryToTurn = ref(10);
+const diaryResult = ref("");
+const diaryLoading = ref(false);
+
+// 自动刷新
+let autoRefreshTimer: ReturnType<typeof setInterval> | null = null;
+const autoRefresh = ref(true);
+
+// 全局 KPI（从现有数据聚合）
+const kpi = computed(() => {
+  const totalCalls = metrics.value.reduce((s, m) => s + m.totalCalls, 0);
+  const totalFail = metrics.value.reduce((s, m) => s + m.failCalls, 0);
+  const overallSuccessRate = totalCalls > 0 ? ((totalCalls - totalFail) / totalCalls * 100).toFixed(1) : "—";
+  const avgToken = metrics.value.length > 0
+    ? (metrics.value.reduce((s, m) => s + m.avgTokens, 0) / metrics.value.length).toFixed(0)
+    : "—";
+  // P95 耗时：取 traces 中按 elapsedMs 排序的 95% 分位
+  const sorted = [...traces.value].sort((a, b) => a.elapsedMs - b.elapsedMs);
+  const p95 = sorted.length > 0
+    ? sorted[Math.floor(sorted.length * 0.95)] ?? sorted[sorted.length - 1]
+    : null;
+  const p95Ms = p95 ? p95.elapsedMs : null;
+  const toolTotalCalls = toolSummary.value.reduce((s, t) => s + t.totalCalls, 0);
+  return { totalCalls, overallSuccessRate, avgToken, p95Ms, toolTotalCalls };
+});
 
 async function refresh() {
   loading.value = true;
   error.value = "";
   try {
-    const [m, t] = await Promise.all([getAgentMetrics(), getRecentTraces(30)]);
+    const [m, t, ts, ta] = await Promise.all([
+      getAgentMetrics(),
+      getRecentTraces(30),
+      getToolSummary(),
+      getToolAudits(20),
+    ]);
     metrics.value = m.sort((a, b) => b.avgMs - a.avgMs);
     traces.value = t;
+    toolSummary.value = ts;
+    toolAudits.value = ta;
   } catch (e) {
     error.value = e instanceof Error ? e.message : "加载失败";
   } finally {
     loading.value = false;
+  }
+}
+
+function toggleAutoRefresh() {
+  autoRefresh.value = !autoRefresh.value;
+  if (autoRefresh.value) {
+    autoRefreshTimer = setInterval(refresh, 30000);
+  } else if (autoRefreshTimer) {
+    clearInterval(autoRefreshTimer);
+    autoRefreshTimer = null;
+  }
+}
+
+async function forceSummarize() {
+  if (!diarySessionId.value.trim()) {
+    diaryResult.value = "请填写 SessionId";
+    return;
+  }
+  diaryLoading.value = true;
+  diaryResult.value = "";
+  try {
+    const res = await http.post<ApiResponse<Record<string, unknown>>>("/admin/diary/force-summarize", {
+      sessionId: diarySessionId.value.trim(),
+      fromTurn: diaryFromTurn.value,
+      toTurn: diaryToTurn.value,
+    });
+    const d = res.data.data as Record<string, unknown>;
+    diaryResult.value = `成功 L${d.level}摘要 Turn ${d.fromTurn}~${d.toTurn}`;
+  } catch (e) {
+    diaryResult.value = e instanceof Error ? e.message : "操作失败";
+  } finally {
+    diaryLoading.value = false;
   }
 }
 
@@ -32,8 +104,8 @@ function formatTime(ts: number) {
 }
 
 function statusColor(status: string) {
-  if (status === "OK" || status === "success") return "var(--ok)";
-  if (status === "error" || status === "ABORTED") return "var(--danger)";
+  if (status === "OK" || status === "success" || status === "SUCCESS") return "var(--ok)";
+  if (status === "error" || status === "ABORTED" || status === "FAILED") return "var(--danger)";
   return "var(--text-03)";
 }
 
@@ -41,7 +113,18 @@ function successRatePct(rate: number) {
   return (rate * 100).toFixed(1) + "%";
 }
 
-onMounted(refresh);
+function toolSuccessRate(t: ToolSummary) {
+  return t.totalCalls > 0 ? ((t.successCalls / t.totalCalls) * 100).toFixed(1) + "%" : "—";
+}
+
+onMounted(() => {
+  refresh();
+  autoRefreshTimer = setInterval(refresh, 30000);
+});
+
+onUnmounted(() => {
+  if (autoRefreshTimer) clearInterval(autoRefreshTimer);
+});
 </script>
 
 <template>
@@ -51,12 +134,45 @@ onMounted(refresh);
         <p class="meta">Ruin Rain Admin</p>
         <h1>Agent 可观测性面板</h1>
       </div>
-      <button class="btn" :disabled="loading" @click="refresh">
-        {{ loading ? "加载中…" : "刷新" }}
-      </button>
+      <div class="topbar-actions">
+        <button class="btn btn-ghost" @click="toggleAutoRefresh">
+          {{ autoRefresh ? "自动刷新 ON" : "自动刷新 OFF" }}
+        </button>
+        <button class="btn" :disabled="loading" @click="refresh">
+          {{ loading ? "加载中…" : "手动刷新" }}
+        </button>
+      </div>
     </header>
 
     <p v-if="error" class="notice">{{ error }}</p>
+
+    <!-- KPI 汇总卡 -->
+    <section class="kpi-row">
+      <div class="kpi-card panel">
+        <p class="kpi-label">总调用次数</p>
+        <p class="kpi-value">{{ kpi.totalCalls }}</p>
+      </div>
+      <div class="kpi-card panel">
+        <p class="kpi-label">整体成功率</p>
+        <p class="kpi-value" :style="{ color: parseFloat(kpi.overallSuccessRate as string) >= 90 ? 'var(--ok)' : 'var(--danger)' }">
+          {{ kpi.overallSuccessRate }}%
+        </p>
+      </div>
+      <div class="kpi-card panel">
+        <p class="kpi-label">P95 回合耗时</p>
+        <p class="kpi-value" :style="{ color: (kpi.p95Ms ?? 0) > 15000 ? 'var(--danger)' : (kpi.p95Ms ?? 0) > 8000 ? '#f5a623' : 'var(--ok)' }">
+          {{ kpi.p95Ms != null ? kpi.p95Ms + 'ms' : '—' }}
+        </p>
+      </div>
+      <div class="kpi-card panel">
+        <p class="kpi-label">平均 Token/Agent</p>
+        <p class="kpi-value">{{ kpi.avgToken }}</p>
+      </div>
+      <div class="kpi-card panel">
+        <p class="kpi-label">Tool 调用总次数</p>
+        <p class="kpi-value">{{ kpi.toolTotalCalls }}</p>
+      </div>
+    </section>
 
     <!-- Agent 聚合指标 -->
     <section class="panel section-box">
@@ -98,6 +214,88 @@ onMounted(refresh);
                   {{ successRatePct(m.successRate) }}
                 </span>
               </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- Tool 调用监控 -->
+    <section class="panel section-box">
+      <h2 class="section-title">Tool 调用汇总</h2>
+      <div class="table-wrap">
+        <table class="metrics-table">
+          <thead>
+            <tr>
+              <th>Tool</th>
+              <th>调用次数</th>
+              <th>成功</th>
+              <th>失败</th>
+              <th>平均耗时(ms)</th>
+              <th>平均重试</th>
+              <th>成功率</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-if="toolSummary.length === 0">
+              <td colspan="7" class="empty-cell">暂无 Tool 调用数据</td>
+            </tr>
+            <tr v-for="t in toolSummary" :key="t.toolName">
+              <td class="agent-name">{{ t.toolName }}</td>
+              <td>{{ t.totalCalls }}</td>
+              <td>{{ t.successCalls }}</td>
+              <td :style="{ color: t.failedCalls > 0 ? 'var(--danger)' : 'inherit' }">{{ t.failedCalls }}</td>
+              <td>
+                <span :style="{ color: t.avgMs > 3000 ? 'var(--danger)' : t.avgMs > 1000 ? '#f5a623' : 'var(--ok)' }">
+                  {{ t.avgMs.toFixed(0) }}
+                </span>
+              </td>
+              <td class="mono">{{ t.avgRetry.toFixed(2) }}</td>
+              <td>
+                <span :style="{ color: statusColor(t.totalCalls > 0 && t.successCalls / t.totalCalls >= 0.9 ? 'OK' : 'error') }">
+                  {{ toolSuccessRate(t) }}
+                </span>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- Tool 审计明细 -->
+    <section class="panel section-box">
+      <h2 class="section-title">Tool 审计明细（最近 20 条）</h2>
+      <div class="table-wrap">
+        <table class="metrics-table">
+          <thead>
+            <tr>
+              <th>时间</th>
+              <th>Tool</th>
+              <th>调用方 Agent</th>
+              <th>状态</th>
+              <th>耗时(ms)</th>
+              <th>重试</th>
+              <th>补偿</th>
+              <th>SessionId</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-if="toolAudits.length === 0">
+              <td colspan="8" class="empty-cell">暂无审计记录</td>
+            </tr>
+            <tr v-for="(a, i) in toolAudits" :key="i">
+              <td class="mono">{{ a.createdAt ? a.createdAt.substring(11, 19) : '—' }}</td>
+              <td class="agent-name">{{ a.toolName }}</td>
+              <td class="mono">{{ a.callerAgent || '—' }}</td>
+              <td>
+                <span class="status-badge" :style="{ background: statusColor(a.status) + '22', color: statusColor(a.status) }">
+                  {{ a.status }}
+                </span>
+              </td>
+              <td class="mono">{{ a.latencyMs }}</td>
+              <td class="mono">{{ a.retryCount }}</td>
+              <td class="mono">{{ a.compensated ? '是' : '—' }}</td>
+              <td class="mono" style="max-width:140px;overflow:hidden;text-overflow:ellipsis;">{{ (a.sessionId || '').substring(0, 18) }}</td>
             </tr>
           </tbody>
         </table>
@@ -180,6 +378,23 @@ onMounted(refresh);
         </table>
       </div>
     </section>
+
+    <!-- Diary 运维操作 -->
+    <section class="panel section-box">
+      <h2 class="section-title">Diary 运维：强制摘要</h2>
+      <div class="diary-ops">
+        <label class="ops-label">SessionId</label>
+        <input v-model="diarySessionId" class="ops-input" placeholder="会话 UUID" />
+        <label class="ops-label">From Turn</label>
+        <input v-model.number="diaryFromTurn" class="ops-input ops-input-sm" type="number" min="1" />
+        <label class="ops-label">To Turn</label>
+        <input v-model.number="diaryToTurn" class="ops-input ops-input-sm" type="number" min="1" />
+        <button class="btn" :disabled="diaryLoading" @click="forceSummarize">
+          {{ diaryLoading ? "执行中…" : "执行摘要" }}
+        </button>
+        <span v-if="diaryResult" class="ops-result mono">{{ diaryResult }}</span>
+      </div>
+    </section>
   </main>
 </template>
 
@@ -196,11 +411,47 @@ onMounted(refresh);
   align-items: center;
 }
 
+.topbar-actions {
+  display: flex;
+  gap: 8px;
+}
+
 h1 {
   margin: 2px 0 0;
   font-size: 26px;
   font-family: var(--font-display);
   letter-spacing: 0.04em;
+}
+
+/* KPI 卡 */
+.kpi-row {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 12px;
+}
+
+.kpi-card {
+  padding: 16px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.kpi-label {
+  margin: 0;
+  font-size: 11px;
+  font-family: var(--font-mono);
+  color: var(--text-03);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.kpi-value {
+  margin: 0;
+  font-size: 24px;
+  font-family: var(--font-mono);
+  font-weight: 700;
+  color: var(--text-01);
 }
 
 h2.section-title {
@@ -338,6 +589,49 @@ h2.section-title {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* Diary 操作 */
+.diary-ops {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.ops-label {
+  font-size: 12px;
+  font-family: var(--font-mono);
+  color: var(--text-03);
+}
+
+.ops-input {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-sm);
+  color: var(--text-01);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  padding: 6px 10px;
+  width: 280px;
+}
+
+.ops-input-sm {
+  width: 70px;
+}
+
+.ops-result {
+  font-size: 12px;
+  color: var(--ok);
+  padding: 4px 8px;
+  border: 1px solid var(--ok);
+  border-radius: var(--radius-sm);
+}
+
+.btn-ghost {
+  background: transparent;
+  border: 1px solid var(--line-soft);
+  color: var(--text-02);
 }
 
 .notice {
