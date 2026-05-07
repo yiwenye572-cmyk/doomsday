@@ -3,7 +3,7 @@ package com.doomsday.game.admin;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.time.Duration;
 import java.util.ArrayList;
-import java.util.HashMap;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import org.slf4j.Logger;
@@ -163,6 +163,66 @@ public class AgentMetricsStore {
         }
     }
 
+    /**
+     * 最近窗口与前序窗口对比：用于展示优化前后效果。
+     */
+    public TraceMetricsComparison getTraceMetricsComparison(int windowSize) {
+        int safeWindow = Math.max(5, Math.min(windowSize, 100));
+        List<TraceDetail> traces = getRecentTraces(safeWindow * 2);
+        List<TraceDetail> sorted = traces.stream()
+                .sorted(Comparator.comparingLong(TraceDetail::startedAt).reversed())
+                .toList();
+
+        List<TraceDetail> currentWindow = sorted.stream().limit(safeWindow).toList();
+        List<TraceDetail> previousWindow = sorted.stream().skip(safeWindow).limit(safeWindow).toList();
+
+        TraceMetricsSnapshot current = buildSnapshot(currentWindow);
+        TraceMetricsSnapshot previous = buildSnapshot(previousWindow);
+        return new TraceMetricsComparison(current, previous);
+    }
+
+    private TraceMetricsSnapshot buildSnapshot(List<TraceDetail> traces) {
+        if (traces == null || traces.isEmpty()) {
+            return new TraceMetricsSnapshot(0, 0, 0, 0, 0, 0, 0, 0);
+        }
+
+        int total = traces.size();
+        long okCount = traces.stream()
+                .filter(t -> t.finalStatus() != null && "OK".equalsIgnoreCase(t.finalStatus()))
+                .count();
+        List<Long> elapsedList = traces.stream()
+                .map(TraceDetail::elapsedMs)
+                .sorted()
+                .toList();
+        long p95 = elapsedList.get(Math.min(elapsedList.size() - 1, (int) Math.floor(elapsedList.size() * 0.95)));
+        double avgElapsed = traces.stream().mapToLong(TraceDetail::elapsedMs).average().orElse(0);
+        long conflictCount = traces.stream().filter(t -> Boolean.TRUE.equals(t.conflictDetected())).count();
+        long eventHitCount = traces.stream().filter(t -> Boolean.TRUE.equals(t.eventHit())).count();
+        double avgEventHit = traces.stream()
+                .map(TraceDetail::eventHitCount)
+                .filter(v -> v != null)
+                .mapToInt(Integer::intValue)
+                .average()
+                .orElse(0);
+        double avgEventCandidates = traces.stream()
+                .map(TraceDetail::eventCandidateCount)
+                .filter(v -> v != null)
+                .mapToInt(Integer::intValue)
+                .average()
+                .orElse(0);
+
+        return new TraceMetricsSnapshot(
+                total,
+                okCount,
+                total > 0 ? (double) okCount / total : 0,
+                avgElapsed,
+                p95,
+                total > 0 ? (double) conflictCount / total : 0,
+                total > 0 ? (double) eventHitCount / total : 0,
+                avgEventCandidates > 0 ? Math.min(1.0, avgEventHit / avgEventCandidates) : 0
+        );
+    }
+
     private long parseLong(Map<Object, Object> map, String field) {
         Object v = map.get(field);
         if (v == null) return 0;
@@ -193,7 +253,27 @@ public class AgentMetricsStore {
             long startedAt,
             long elapsedMs,
             String finalStatus,
-            List<AgentSpan> spans
+            List<AgentSpan> spans,
+            Boolean conflictDetected,
+            Boolean eventHit,
+            Integer eventHitCount,
+            Integer eventCandidateCount
+    ) {}
+
+    public record TraceMetricsSnapshot(
+            int sampleSize,
+            long successCount,
+            double successRate,
+            double avgElapsedMs,
+            long p95ElapsedMs,
+            double conflictRate,
+            double eventHitRate,
+            double eventPrecision
+    ) {}
+
+    public record TraceMetricsComparison(
+            TraceMetricsSnapshot current,
+            TraceMetricsSnapshot previous
     ) {}
 
     public record AgentSpan(

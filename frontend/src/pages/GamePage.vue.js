@@ -19,6 +19,7 @@ const diaryEntries = ref([]);
 const diaryLoading = ref(false);
 const diaryError = ref("");
 const diaryLevel = ref("L0");
+const imageSourceMode = ref("gallery");
 const loading = ref(false);
 const pendingAction = ref(false);
 const notice = ref("");
@@ -102,8 +103,25 @@ async function fetchImageForPlot(p) {
     image.value = null;
     if (!p || !p.text)
         return;
+    if (imageSourceMode.value === "gallery") {
+        try {
+            const gallery = await gallerySearch(p.text, 1);
+            if (gallery && gallery.length > 0) {
+                image.value = gallery[0];
+            }
+        }
+        catch (e) {
+            // ignore, no image
+        }
+        return;
+    }
     try {
-        const resp = await generateImage({ sessionId: sessionId.value, prompt: p.text, timeoutMs: 3000 });
+        const resp = await generateImage({
+            sessionId: sessionId.value,
+            prompt: p.text,
+            preferredSource: "ai",
+            timeoutMs: 3000,
+        });
         image.value = resp;
     }
     catch (err) {
@@ -117,6 +135,10 @@ async function fetchImageForPlot(p) {
             // ignore, no image
         }
     }
+}
+function setImageSourceMode(mode) {
+    imageSourceMode.value = mode;
+    localStorage.setItem("rr.imageSourceMode", mode);
 }
 async function handleComeback() {
     if (!state.value || pendingAction.value) {
@@ -150,6 +172,10 @@ async function init() {
     loading.value = true;
     notice.value = "";
     try {
+        const saved = localStorage.getItem("rr.imageSourceMode");
+        if (saved === "ai" || saved === "gallery") {
+            imageSourceMode.value = saved;
+        }
         await refreshState();
         await refreshDiary("L0");
     }
@@ -233,6 +259,37 @@ if (!__VLS_ctx.loading) {
         onRegenerate: (__VLS_ctx.onRegenerate)
     };
     var __VLS_2;
+    __VLS_asFunctionalElement(__VLS_intrinsicElements.section, __VLS_intrinsicElements.section)({
+        ...{ class: "panel image-mode-panel" },
+    });
+    __VLS_asFunctionalElement(__VLS_intrinsicElements.p, __VLS_intrinsicElements.p)({
+        ...{ class: "mode-title" },
+    });
+    __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
+        ...{ class: "mode-buttons" },
+    });
+    __VLS_asFunctionalElement(__VLS_intrinsicElements.button, __VLS_intrinsicElements.button)({
+        ...{ onClick: (...[$event]) => {
+                if (!(!__VLS_ctx.loading))
+                    return;
+                __VLS_ctx.setImageSourceMode('ai');
+            } },
+        ...{ class: "btn" },
+        ...{ class: ({ 'btn-active': __VLS_ctx.imageSourceMode === 'ai' }) },
+    });
+    __VLS_asFunctionalElement(__VLS_intrinsicElements.button, __VLS_intrinsicElements.button)({
+        ...{ onClick: (...[$event]) => {
+                if (!(!__VLS_ctx.loading))
+                    return;
+                __VLS_ctx.setImageSourceMode('gallery');
+            } },
+        ...{ class: "btn" },
+        ...{ class: ({ 'btn-active': __VLS_ctx.imageSourceMode === 'gallery' }) },
+    });
+    __VLS_asFunctionalElement(__VLS_intrinsicElements.p, __VLS_intrinsicElements.p)({
+        ...{ class: "mode-desc" },
+    });
+    (__VLS_ctx.imageSourceMode === 'ai' ? '优先 AI 生图（失败自动回退图库）' : '仅使用 Pexels 图库');
     /** @type {[typeof ActionInput, ]} */ ;
     // @ts-ignore
     const __VLS_7 = __VLS_asFunctionalComponent(ActionInput, new ActionInput({
@@ -333,6 +390,13 @@ if (__VLS_ctx.notice) {
 /** @type {__VLS_StyleScopedClasses['layout']} */ ;
 /** @type {__VLS_StyleScopedClasses['main-col']} */ ;
 /** @type {__VLS_StyleScopedClasses['panel']} */ ;
+/** @type {__VLS_StyleScopedClasses['image-mode-panel']} */ ;
+/** @type {__VLS_StyleScopedClasses['mode-title']} */ ;
+/** @type {__VLS_StyleScopedClasses['mode-buttons']} */ ;
+/** @type {__VLS_StyleScopedClasses['btn']} */ ;
+/** @type {__VLS_StyleScopedClasses['btn']} */ ;
+/** @type {__VLS_StyleScopedClasses['mode-desc']} */ ;
+/** @type {__VLS_StyleScopedClasses['panel']} */ ;
 /** @type {__VLS_StyleScopedClasses['loading-box']} */ ;
 /** @type {__VLS_StyleScopedClasses['notice']} */ ;
 /** @type {__VLS_StyleScopedClasses['processing']} */ ;
@@ -354,6 +418,7 @@ const __VLS_self = (await import('vue')).defineComponent({
             diaryEntries: diaryEntries,
             diaryLoading: diaryLoading,
             diaryError: diaryError,
+            imageSourceMode: imageSourceMode,
             loading: loading,
             pendingAction: pendingAction,
             notice: notice,
@@ -361,6 +426,7 @@ const __VLS_self = (await import('vue')).defineComponent({
             refreshDiary: refreshDiary,
             handleSubmit: handleSubmit,
             handleChoose: handleChoose,
+            setImageSourceMode: setImageSourceMode,
             handleComeback: handleComeback,
             goReplay: goReplay,
             onRegenerate: onRegenerate,

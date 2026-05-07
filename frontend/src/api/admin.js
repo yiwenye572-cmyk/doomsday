@@ -13,6 +13,12 @@ export async function getTrace(traceId) {
     const res = await http.get(`/admin/metrics/traces/${traceId}`);
     return res.data.data;
 }
+export async function getMetricsOverview(window = 30) {
+    const res = await http.get("/admin/metrics/overview", {
+        params: { window },
+    });
+    return res.data.data;
+}
 export async function getToolSummary() {
     const res = await http.get("/admin/tools/summary");
     return res.data.data;

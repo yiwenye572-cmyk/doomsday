@@ -1,10 +1,11 @@
 import { computed, onMounted, onUnmounted, ref } from "vue";
-import { getAgentMetrics, getRecentTraces, getToolSummary, getToolAudits } from "../api/admin";
+import { getAgentMetrics, getRecentTraces, getToolSummary, getToolAudits, getMetricsOverview } from "../api/admin";
 import http from "../api/http";
 const metrics = ref([]);
 const traces = ref([]);
 const toolSummary = ref([]);
 const toolAudits = ref([]);
+const overview = ref(null);
 const selectedTrace = ref(null);
 const loading = ref(false);
 const error = ref("");
@@ -32,22 +33,32 @@ const kpi = computed(() => {
         : null;
     const p95Ms = p95 ? p95.elapsedMs : null;
     const toolTotalCalls = toolSummary.value.reduce((s, t) => s + t.totalCalls, 0);
-    return { totalCalls, overallSuccessRate, avgToken, p95Ms, toolTotalCalls };
+    return {
+        totalCalls,
+        overallSuccessRate,
+        avgToken,
+        p95Ms,
+        toolTotalCalls,
+        conflictRate: overview.value?.current?.conflictRate ?? 0,
+        eventHitRate: overview.value?.current?.eventHitRate ?? 0,
+    };
 });
 async function refresh() {
     loading.value = true;
     error.value = "";
     try {
-        const [m, t, ts, ta] = await Promise.all([
+        const [m, t, ts, ta, ov] = await Promise.all([
             getAgentMetrics(),
             getRecentTraces(30),
             getToolSummary(),
             getToolAudits(20),
+            getMetricsOverview(30),
         ]);
         metrics.value = m.sort((a, b) => b.avgMs - a.avgMs);
         traces.value = t;
         toolSummary.value = ts;
         toolAudits.value = ta;
+        overview.value = ov;
     }
     catch (e) {
         error.value = e instanceof Error ? e.message : "加载失败";
@@ -55,6 +66,23 @@ async function refresh() {
     finally {
         loading.value = false;
     }
+}
+function pct(value) {
+    if (value == null || Number.isNaN(value))
+        return "—";
+    return (value * 100).toFixed(1) + "%";
+}
+function deltaPct(curr, prev) {
+    if (curr == null || prev == null)
+        return "—";
+    const delta = (curr - prev) * 100;
+    return `${delta >= 0 ? "+" : ""}${delta.toFixed(1)}%`;
+}
+function deltaMs(curr, prev) {
+    if (curr == null || prev == null)
+        return "—";
+    const delta = curr - prev;
+    return `${delta >= 0 ? "+" : ""}${delta.toFixed(0)}ms`;
 }
 function toggleAutoRefresh() {
     autoRefresh.value = !autoRefresh.value;
@@ -191,7 +219,14 @@ __VLS_asFunctionalElement(__VLS_intrinsicElements.p, __VLS_intrinsicElements.p)(
     ...{ class: "kpi-value" },
     ...{ style: ({ color: (__VLS_ctx.kpi.p95Ms ?? 0) > 15000 ? 'var(--danger)' : (__VLS_ctx.kpi.p95Ms ?? 0) > 8000 ? '#f5a623' : 'var(--ok)' }) },
 });
-(__VLS_ctx.kpi.p95Ms != null ? __VLS_ctx.kpi.p95Ms + 'ms' : '—');
+(__VLS_ctx.overview?.current?.p95ElapsedMs != null ? __VLS_ctx.overview.current.p95ElapsedMs + 'ms' : (__VLS_ctx.kpi.p95Ms != null ? __VLS_ctx.kpi.p95Ms + 'ms' : '—'));
+if (__VLS_ctx.overview) {
+    __VLS_asFunctionalElement(__VLS_intrinsicElements.p, __VLS_intrinsicElements.p)({
+        ...{ class: "kpi-sub" },
+    });
+    (__VLS_ctx.overview.previous.p95ElapsedMs);
+    (__VLS_ctx.deltaMs(__VLS_ctx.overview.current.p95ElapsedMs, __VLS_ctx.overview.previous.p95ElapsedMs));
+}
 __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
     ...{ class: "kpi-card panel" },
 });
@@ -212,6 +247,42 @@ __VLS_asFunctionalElement(__VLS_intrinsicElements.p, __VLS_intrinsicElements.p)(
     ...{ class: "kpi-value" },
 });
 (__VLS_ctx.kpi.toolTotalCalls);
+__VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
+    ...{ class: "kpi-card panel" },
+});
+__VLS_asFunctionalElement(__VLS_intrinsicElements.p, __VLS_intrinsicElements.p)({
+    ...{ class: "kpi-label" },
+});
+__VLS_asFunctionalElement(__VLS_intrinsicElements.p, __VLS_intrinsicElements.p)({
+    ...{ class: "kpi-value" },
+    ...{ style: ({ color: __VLS_ctx.kpi.conflictRate > 0.15 ? 'var(--danger)' : __VLS_ctx.kpi.conflictRate > 0.08 ? '#f5a623' : 'var(--ok)' }) },
+});
+(__VLS_ctx.pct(__VLS_ctx.kpi.conflictRate));
+if (__VLS_ctx.overview) {
+    __VLS_asFunctionalElement(__VLS_intrinsicElements.p, __VLS_intrinsicElements.p)({
+        ...{ class: "kpi-sub" },
+    });
+    (__VLS_ctx.pct(__VLS_ctx.overview.previous.conflictRate));
+    (__VLS_ctx.deltaPct(__VLS_ctx.overview.current.conflictRate, __VLS_ctx.overview.previous.conflictRate));
+}
+__VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
+    ...{ class: "kpi-card panel" },
+});
+__VLS_asFunctionalElement(__VLS_intrinsicElements.p, __VLS_intrinsicElements.p)({
+    ...{ class: "kpi-label" },
+});
+__VLS_asFunctionalElement(__VLS_intrinsicElements.p, __VLS_intrinsicElements.p)({
+    ...{ class: "kpi-value" },
+    ...{ style: ({ color: __VLS_ctx.kpi.eventHitRate < 0.35 ? 'var(--danger)' : __VLS_ctx.kpi.eventHitRate < 0.55 ? '#f5a623' : 'var(--ok)' }) },
+});
+(__VLS_ctx.pct(__VLS_ctx.kpi.eventHitRate));
+if (__VLS_ctx.overview) {
+    __VLS_asFunctionalElement(__VLS_intrinsicElements.p, __VLS_intrinsicElements.p)({
+        ...{ class: "kpi-sub" },
+    });
+    (__VLS_ctx.pct(__VLS_ctx.overview.previous.eventHitRate));
+    (__VLS_ctx.deltaPct(__VLS_ctx.overview.current.eventHitRate, __VLS_ctx.overview.previous.eventHitRate));
+}
 __VLS_asFunctionalElement(__VLS_intrinsicElements.section, __VLS_intrinsicElements.section)({
     ...{ class: "panel section-box" },
 });
@@ -432,11 +503,12 @@ __VLS_asFunctionalElement(__VLS_intrinsicElements.th, __VLS_intrinsicElements.th
 __VLS_asFunctionalElement(__VLS_intrinsicElements.th, __VLS_intrinsicElements.th)({});
 __VLS_asFunctionalElement(__VLS_intrinsicElements.th, __VLS_intrinsicElements.th)({});
 __VLS_asFunctionalElement(__VLS_intrinsicElements.th, __VLS_intrinsicElements.th)({});
+__VLS_asFunctionalElement(__VLS_intrinsicElements.th, __VLS_intrinsicElements.th)({});
 __VLS_asFunctionalElement(__VLS_intrinsicElements.tbody, __VLS_intrinsicElements.tbody)({});
 if (__VLS_ctx.traces.length === 0) {
     __VLS_asFunctionalElement(__VLS_intrinsicElements.tr, __VLS_intrinsicElements.tr)({});
     __VLS_asFunctionalElement(__VLS_intrinsicElements.td, __VLS_intrinsicElements.td)({
-        colspan: "6",
+        colspan: "7",
         ...{ class: "empty-cell" },
     });
 }
@@ -464,6 +536,17 @@ for (const [trace] of __VLS_getVForSourceType((__VLS_ctx.traces))) {
         ...{ style: ({ color: trace.elapsedMs > 15000 ? 'var(--danger)' : trace.elapsedMs > 8000 ? '#f5a623' : 'var(--ok)' }) },
     });
     (trace.elapsedMs);
+    __VLS_asFunctionalElement(__VLS_intrinsicElements.td, __VLS_intrinsicElements.td)({
+        ...{ class: "mono" },
+    });
+    __VLS_asFunctionalElement(__VLS_intrinsicElements.span, __VLS_intrinsicElements.span)({
+        ...{ style: ({ color: trace.conflictDetected ? 'var(--danger)' : 'var(--ok)' }) },
+    });
+    (trace.conflictDetected ? '冲突' : '无冲突');
+    __VLS_asFunctionalElement(__VLS_intrinsicElements.span, __VLS_intrinsicElements.span)({
+        ...{ style: ({ color: trace.eventHit ? 'var(--ok)' : 'var(--text-03)' }) },
+    });
+    (trace.eventHit ? '命中' : '未命中');
     __VLS_asFunctionalElement(__VLS_intrinsicElements.td, __VLS_intrinsicElements.td)({});
     __VLS_asFunctionalElement(__VLS_intrinsicElements.span, __VLS_intrinsicElements.span)({
         ...{ class: "status-badge" },
@@ -479,7 +562,7 @@ for (const [trace] of __VLS_getVForSourceType((__VLS_ctx.traces))) {
             ...{ class: "span-detail-row" },
         });
         __VLS_asFunctionalElement(__VLS_intrinsicElements.td, __VLS_intrinsicElements.td)({
-            colspan: "6",
+            colspan: "7",
         });
         __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
             ...{ class: "span-list" },
@@ -623,6 +706,7 @@ if (__VLS_ctx.diaryResult) {
 /** @type {__VLS_StyleScopedClasses['panel']} */ ;
 /** @type {__VLS_StyleScopedClasses['kpi-label']} */ ;
 /** @type {__VLS_StyleScopedClasses['kpi-value']} */ ;
+/** @type {__VLS_StyleScopedClasses['kpi-sub']} */ ;
 /** @type {__VLS_StyleScopedClasses['kpi-card']} */ ;
 /** @type {__VLS_StyleScopedClasses['panel']} */ ;
 /** @type {__VLS_StyleScopedClasses['kpi-label']} */ ;
@@ -631,6 +715,16 @@ if (__VLS_ctx.diaryResult) {
 /** @type {__VLS_StyleScopedClasses['panel']} */ ;
 /** @type {__VLS_StyleScopedClasses['kpi-label']} */ ;
 /** @type {__VLS_StyleScopedClasses['kpi-value']} */ ;
+/** @type {__VLS_StyleScopedClasses['kpi-card']} */ ;
+/** @type {__VLS_StyleScopedClasses['panel']} */ ;
+/** @type {__VLS_StyleScopedClasses['kpi-label']} */ ;
+/** @type {__VLS_StyleScopedClasses['kpi-value']} */ ;
+/** @type {__VLS_StyleScopedClasses['kpi-sub']} */ ;
+/** @type {__VLS_StyleScopedClasses['kpi-card']} */ ;
+/** @type {__VLS_StyleScopedClasses['panel']} */ ;
+/** @type {__VLS_StyleScopedClasses['kpi-label']} */ ;
+/** @type {__VLS_StyleScopedClasses['kpi-value']} */ ;
+/** @type {__VLS_StyleScopedClasses['kpi-sub']} */ ;
 /** @type {__VLS_StyleScopedClasses['panel']} */ ;
 /** @type {__VLS_StyleScopedClasses['section-box']} */ ;
 /** @type {__VLS_StyleScopedClasses['section-title']} */ ;
@@ -670,6 +764,7 @@ if (__VLS_ctx.diaryResult) {
 /** @type {__VLS_StyleScopedClasses['metrics-table']} */ ;
 /** @type {__VLS_StyleScopedClasses['empty-cell']} */ ;
 /** @type {__VLS_StyleScopedClasses['trace-row']} */ ;
+/** @type {__VLS_StyleScopedClasses['mono']} */ ;
 /** @type {__VLS_StyleScopedClasses['mono']} */ ;
 /** @type {__VLS_StyleScopedClasses['mono']} */ ;
 /** @type {__VLS_StyleScopedClasses['status-badge']} */ ;
@@ -717,6 +812,7 @@ const __VLS_self = (await import('vue')).defineComponent({
             traces: traces,
             toolSummary: toolSummary,
             toolAudits: toolAudits,
+            overview: overview,
             selectedTrace: selectedTrace,
             loading: loading,
             error: error,
@@ -728,6 +824,9 @@ const __VLS_self = (await import('vue')).defineComponent({
             autoRefresh: autoRefresh,
             kpi: kpi,
             refresh: refresh,
+            pct: pct,
+            deltaPct: deltaPct,
+            deltaMs: deltaMs,
             toggleAutoRefresh: toggleAutoRefresh,
             forceSummarize: forceSummarize,
             selectTrace: selectTrace,

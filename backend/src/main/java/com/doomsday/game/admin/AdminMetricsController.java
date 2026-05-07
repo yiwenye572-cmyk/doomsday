@@ -37,6 +37,13 @@ public class AdminMetricsController {
         return ApiResponse.ok(metricsStore.getRecentTraces(safeLimit), TraceIdSupport.currentTraceId());
     }
 
+    @GetMapping("/overview")
+    public ApiResponse<AgentMetricsStore.TraceMetricsComparison> getOverview(
+            @RequestParam(defaultValue = "30") int window) {
+        int safeWindow = Math.max(5, Math.min(window, 100));
+        return ApiResponse.ok(metricsStore.getTraceMetricsComparison(safeWindow), TraceIdSupport.currentTraceId());
+    }
+
     @GetMapping("/traces/{traceId}")
     public ApiResponse<AgentMetricsStore.TraceDetail> getTrace(@PathVariable String traceId) {
         AgentMetricsStore.TraceDetail detail = metricsStore.getTrace(traceId);

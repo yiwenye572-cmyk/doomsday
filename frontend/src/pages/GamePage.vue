@@ -24,6 +24,7 @@ const diaryEntries = ref<DiaryEntryView[]>([]);
 const diaryLoading = ref(false);
 const diaryError = ref("");
 const diaryLevel = ref<DiaryLevel>("L0");
+const imageSourceMode = ref<"ai" | "gallery">("gallery");
 const loading = ref(false);
 const pendingAction = ref(false);
 const notice = ref("");
@@ -106,8 +107,25 @@ async function handleChoose(optionId: string) {
 async function fetchImageForPlot(p: PlotPayload | null) {
   image.value = null;
   if (!p || !p.text) return;
+  if (imageSourceMode.value === "gallery") {
+    try {
+      const gallery = await gallerySearch(p.text, 1);
+      if (gallery && gallery.length > 0) {
+        image.value = gallery[0];
+      }
+    } catch (e) {
+      // ignore, no image
+    }
+    return;
+  }
+
   try {
-    const resp = await generateImage({ sessionId: sessionId.value, prompt: p.text, timeoutMs: 3000 });
+    const resp = await generateImage({
+      sessionId: sessionId.value,
+      prompt: p.text,
+      preferredSource: "ai",
+      timeoutMs: 3000,
+    });
     image.value = resp;
   } catch (err) {
     try {
@@ -119,6 +137,11 @@ async function fetchImageForPlot(p: PlotPayload | null) {
       // ignore, no image
     }
   }
+}
+
+function setImageSourceMode(mode: "ai" | "gallery") {
+  imageSourceMode.value = mode;
+  localStorage.setItem("rr.imageSourceMode", mode);
 }
 
 async function handleComeback() {
@@ -153,6 +176,10 @@ async function init() {
   loading.value = true;
   notice.value = "";
   try {
+    const saved = localStorage.getItem("rr.imageSourceMode");
+    if (saved === "ai" || saved === "gallery") {
+      imageSourceMode.value = saved;
+    }
     await refreshState();
     await refreshDiary("L0");
   } catch (e) {
@@ -190,6 +217,26 @@ onMounted(init);
     <section class="layout" v-if="!loading">
       <div class="main-col">
         <NarrativePanel :plot="plot" :image="image" @regenerate="onRegenerate" />
+        <section class="panel image-mode-panel">
+          <p class="mode-title">场景图来源</p>
+          <div class="mode-buttons">
+            <button
+              class="btn"
+              :class="{ 'btn-active': imageSourceMode === 'ai' }"
+              @click="setImageSourceMode('ai')"
+            >
+              AI 生图
+            </button>
+            <button
+              class="btn"
+              :class="{ 'btn-active': imageSourceMode === 'gallery' }"
+              @click="setImageSourceMode('gallery')"
+            >
+              Pexels 图库
+            </button>
+          </div>
+          <p class="mode-desc">当前：{{ imageSourceMode === 'ai' ? '优先 AI 生图（失败自动回退图库）' : '仅使用 Pexels 图库' }}</p>
+        </section>
         <ActionInput :loading="pendingAction" @submit="handleSubmit" @comeback="handleComeback" />
         <OptionsGrid :options="options" :loading="pendingAction" @choose="handleChoose" />
         <DiaryPanel :loading="diaryLoading" :entries="diaryEntries" :error="diaryError" @refresh="refreshDiary" />
@@ -248,6 +295,38 @@ h1 {
 .main-col {
   display: grid;
   gap: 12px;
+}
+
+.image-mode-panel {
+  padding: 14px;
+  display: grid;
+  gap: 8px;
+}
+
+.mode-title {
+  margin: 0;
+  font-size: 12px;
+  font-family: var(--font-mono);
+  color: var(--text-03);
+  letter-spacing: 0.08em;
+}
+
+.mode-buttons {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.btn-active {
+  border-color: rgba(255, 106, 61, 0.8);
+  color: var(--text-01);
+  background: rgba(255, 106, 61, 0.15);
+}
+
+.mode-desc {
+  margin: 0;
+  color: var(--text-03);
+  font-size: 12px;
 }
 
 .loading-box {

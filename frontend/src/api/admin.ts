@@ -39,6 +39,26 @@ export interface TraceDetail {
   elapsedMs: number;
   finalStatus: string;
   spans: AgentSpan[];
+  conflictDetected?: boolean;
+  eventHit?: boolean;
+  eventHitCount?: number;
+  eventCandidateCount?: number;
+}
+
+export interface TraceMetricsSnapshot {
+  sampleSize: number;
+  successCount: number;
+  successRate: number;
+  avgElapsedMs: number;
+  p95ElapsedMs: number;
+  conflictRate: number;
+  eventHitRate: number;
+  eventPrecision: number;
+}
+
+export interface TraceMetricsComparison {
+  current: TraceMetricsSnapshot;
+  previous: TraceMetricsSnapshot;
 }
 
 export interface ToolSummary {
@@ -84,6 +104,13 @@ export async function getRecentTraces(limit = 20): Promise<TraceDetail[]> {
 
 export async function getTrace(traceId: string): Promise<TraceDetail> {
   const res = await http.get<ApiResponse<TraceDetail>>(`/admin/metrics/traces/${traceId}`);
+  return res.data.data;
+}
+
+export async function getMetricsOverview(window = 30): Promise<TraceMetricsComparison> {
+  const res = await http.get<ApiResponse<TraceMetricsComparison>>("/admin/metrics/overview", {
+    params: { window },
+  });
   return res.data.data;
 }
 

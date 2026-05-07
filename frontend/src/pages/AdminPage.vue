@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from "vue";
-import { getAgentMetrics, getRecentTraces, getToolSummary, getToolAudits } from "../api/admin";
-import type { AgentMetricsSummary, TraceDetail, ToolSummary, ToolAuditItem } from "../api/admin";
+import { getAgentMetrics, getRecentTraces, getToolSummary, getToolAudits, getMetricsOverview } from "../api/admin";
+import type { AgentMetricsSummary, TraceDetail, ToolSummary, ToolAuditItem, TraceMetricsComparison } from "../api/admin";
 import http from "../api/http";
 import type { ApiResponse } from "../types/api";
 
@@ -9,6 +9,7 @@ const metrics = ref<AgentMetricsSummary[]>([]);
 const traces = ref<TraceDetail[]>([]);
 const toolSummary = ref<ToolSummary[]>([]);
 const toolAudits = ref<ToolAuditItem[]>([]);
+const overview = ref<TraceMetricsComparison | null>(null);
 const selectedTrace = ref<TraceDetail | null>(null);
 const loading = ref(false);
 const error = ref("");
@@ -39,28 +40,55 @@ const kpi = computed(() => {
     : null;
   const p95Ms = p95 ? p95.elapsedMs : null;
   const toolTotalCalls = toolSummary.value.reduce((s, t) => s + t.totalCalls, 0);
-  return { totalCalls, overallSuccessRate, avgToken, p95Ms, toolTotalCalls };
+  return {
+    totalCalls,
+    overallSuccessRate,
+    avgToken,
+    p95Ms,
+    toolTotalCalls,
+    conflictRate: overview.value?.current?.conflictRate ?? 0,
+    eventHitRate: overview.value?.current?.eventHitRate ?? 0,
+  };
 });
 
 async function refresh() {
   loading.value = true;
   error.value = "";
   try {
-    const [m, t, ts, ta] = await Promise.all([
+    const [m, t, ts, ta, ov] = await Promise.all([
       getAgentMetrics(),
       getRecentTraces(30),
       getToolSummary(),
       getToolAudits(20),
+      getMetricsOverview(30),
     ]);
     metrics.value = m.sort((a, b) => b.avgMs - a.avgMs);
     traces.value = t;
     toolSummary.value = ts;
     toolAudits.value = ta;
+    overview.value = ov;
   } catch (e) {
     error.value = e instanceof Error ? e.message : "加载失败";
   } finally {
     loading.value = false;
   }
+}
+
+function pct(value: number | null | undefined) {
+  if (value == null || Number.isNaN(value)) return "—";
+  return (value * 100).toFixed(1) + "%";
+}
+
+function deltaPct(curr: number | null | undefined, prev: number | null | undefined) {
+  if (curr == null || prev == null) return "—";
+  const delta = (curr - prev) * 100;
+  return `${delta >= 0 ? "+" : ""}${delta.toFixed(1)}%`;
+}
+
+function deltaMs(curr: number | null | undefined, prev: number | null | undefined) {
+  if (curr == null || prev == null) return "—";
+  const delta = curr - prev;
+  return `${delta >= 0 ? "+" : ""}${delta.toFixed(0)}ms`;
 }
 
 function toggleAutoRefresh() {
@@ -161,8 +189,9 @@ onUnmounted(() => {
       <div class="kpi-card panel">
         <p class="kpi-label">P95 回合耗时</p>
         <p class="kpi-value" :style="{ color: (kpi.p95Ms ?? 0) > 15000 ? 'var(--danger)' : (kpi.p95Ms ?? 0) > 8000 ? '#f5a623' : 'var(--ok)' }">
-          {{ kpi.p95Ms != null ? kpi.p95Ms + 'ms' : '—' }}
+          {{ overview?.current?.p95ElapsedMs != null ? overview.current.p95ElapsedMs + 'ms' : (kpi.p95Ms != null ? kpi.p95Ms + 'ms' : '—') }}
         </p>
+        <p class="kpi-sub" v-if="overview">前窗 {{ overview.previous.p95ElapsedMs }}ms · Δ {{ deltaMs(overview.current.p95ElapsedMs, overview.previous.p95ElapsedMs) }}</p>
       </div>
       <div class="kpi-card panel">
         <p class="kpi-label">平均 Token/Agent</p>
@@ -171,6 +200,20 @@ onUnmounted(() => {
       <div class="kpi-card panel">
         <p class="kpi-label">Tool 调用总次数</p>
         <p class="kpi-value">{{ kpi.toolTotalCalls }}</p>
+      </div>
+      <div class="kpi-card panel">
+        <p class="kpi-label">剧情冲突率</p>
+        <p class="kpi-value" :style="{ color: kpi.conflictRate > 0.15 ? 'var(--danger)' : kpi.conflictRate > 0.08 ? '#f5a623' : 'var(--ok)' }">
+          {{ pct(kpi.conflictRate) }}
+        </p>
+        <p class="kpi-sub" v-if="overview">前窗 {{ pct(overview.previous.conflictRate) }} · Δ {{ deltaPct(overview.current.conflictRate, overview.previous.conflictRate) }}</p>
+      </div>
+      <div class="kpi-card panel">
+        <p class="kpi-label">事件命中率</p>
+        <p class="kpi-value" :style="{ color: kpi.eventHitRate < 0.35 ? 'var(--danger)' : kpi.eventHitRate < 0.55 ? '#f5a623' : 'var(--ok)' }">
+          {{ pct(kpi.eventHitRate) }}
+        </p>
+        <p class="kpi-sub" v-if="overview">前窗 {{ pct(overview.previous.eventHitRate) }} · Δ {{ deltaPct(overview.current.eventHitRate, overview.previous.eventHitRate) }}</p>
       </div>
     </section>
 
@@ -313,13 +356,14 @@ onUnmounted(() => {
               <th>SessionId</th>
               <th>回合</th>
               <th>总耗时(ms)</th>
+              <th>冲突/命中</th>
               <th>状态</th>
               <th>时间</th>
             </tr>
           </thead>
           <tbody>
             <tr v-if="traces.length === 0">
-              <td colspan="6" class="empty-cell">暂无 Trace 数据</td>
+              <td colspan="7" class="empty-cell">暂无 Trace 数据</td>
             </tr>
             <template v-for="trace in traces" :key="trace.traceId">
               <tr
@@ -335,6 +379,11 @@ onUnmounted(() => {
                     {{ trace.elapsedMs }}
                   </span>
                 </td>
+                <td class="mono">
+                  <span :style="{ color: trace.conflictDetected ? 'var(--danger)' : 'var(--ok)' }">{{ trace.conflictDetected ? '冲突' : '无冲突' }}</span>
+                  /
+                  <span :style="{ color: trace.eventHit ? 'var(--ok)' : 'var(--text-03)' }">{{ trace.eventHit ? '命中' : '未命中' }}</span>
+                </td>
                 <td>
                   <span class="status-badge" :style="{ background: statusColor(trace.finalStatus) + '22', color: statusColor(trace.finalStatus) }">
                     {{ trace.finalStatus }}
@@ -344,7 +393,7 @@ onUnmounted(() => {
               </tr>
               <!-- 展开 Span 明细 -->
               <tr v-if="selectedTrace?.traceId === trace.traceId" class="span-detail-row">
-                <td colspan="6">
+                <td colspan="7">
                   <div class="span-list">
                     <div
                       v-for="span in trace.spans"
@@ -426,7 +475,7 @@ h1 {
 /* KPI 卡 */
 .kpi-row {
   display: grid;
-  grid-template-columns: repeat(5, 1fr);
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
   gap: 12px;
 }
 
@@ -452,6 +501,13 @@ h1 {
   font-family: var(--font-mono);
   font-weight: 700;
   color: var(--text-01);
+}
+
+.kpi-sub {
+  margin: 0;
+  font-size: 11px;
+  font-family: var(--font-mono);
+  color: var(--text-03);
 }
 
 h2.section-title {

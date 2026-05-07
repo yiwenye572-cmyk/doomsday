@@ -29,6 +29,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
@@ -92,8 +93,7 @@ public class TurnOrchestrator {
 
         String traceId = "trace_" + UUID.randomUUID().toString().replace("-", "").substring(0, 12);
         TurnContext ctx = new TurnContext(sessionId, session, playerInput, idempotencyKey, traceId);
-        injectRollingMemory(ctx);
-        injectEpisodicSummary(ctx);
+        injectMemoryHints(ctx);
 
         log.info("[Orchestrator] START sessionId={} turn={} traceId={}", sessionId, session.getTurn() + 1, traceId);
         long t0 = System.currentTimeMillis();
@@ -164,49 +164,6 @@ public class TurnOrchestrator {
         return ctx;
     }
 
-    private void injectRollingMemory(TurnContext ctx) {
-        List<TurnMemory> memories = sessionRepo.findRecentTurnMemories(ctx.sessionId, 4);
-        if (memories.isEmpty()) {
-            return;
-        }
-
-        List<TurnContext.L0MemorySummary> memoryHints = new ArrayList<>(memories.size());
-        for (TurnMemory m : memories) {
-            memoryHints.add(new TurnContext.L0MemorySummary(
-                    m.turn(),
-                    fallbackIntent(m.intent()),
-                    Math.max(0, m.staminaLoss()),
-                    m.rewardFlags() == null ? List.of() : m.rewardFlags(),
-                    "第" + Math.max(1, m.dayIndex()) + "天 "
-                        + GameTimeFlow.phaseLabel(m.timePhase())
-                        + " · " + shorten(m.narration(), 36)
-            ));
-
-                String structuredText = "D" + Math.max(1, m.dayIndex())
-                    + "|" + GameTimeFlow.phaseLabel(m.timePhase())
-                    + "|T" + m.turn()
-                    + "|intent=" + fallbackIntent(m.intent())
-                    + "|loss=" + Math.max(0, m.staminaLoss())
-                    + "|gain=" + String.join(",", m.rewardFlags() == null ? List.of() : m.rewardFlags())
-                    + "|note=" + shorten(m.narration(), 56);
-            ctx.retrievedContexts.add(new TurnContext.RetrievedContext(
-                    "memory_l0", "turn_" + m.turn(), structuredText, 0.68
-            ));
-        }
-        ctx.rollingMemories = memoryHints;
-    }
-
-    private void injectEpisodicSummary(TurnContext ctx) {
-        List<String> episodic = sessionRepo.findRecentEpisodicSummaries(ctx.sessionId, 2);
-        if (episodic.isEmpty()) {
-            return;
-        }
-        ctx.episodicSummaries = episodic;
-        episodic.forEach(summary -> ctx.retrievedContexts.add(new TurnContext.RetrievedContext(
-                "memory_l1", "episode", summary, 0.60
-        )));
-    }
-
     private void appendRollingMemory(TurnContext ctx) {
         String narration = ctx.finalNarration != null && !ctx.finalNarration.isBlank()
                 ? ctx.finalNarration
@@ -230,17 +187,18 @@ public class TurnOrchestrator {
         if (requests == null || requests.isEmpty()) {
             return;
         }
-        for (ToolCallRequest request : requests) {
-            ToolCallResult result = toolExecutor.execute(
-                    new ToolContext(ctx.sessionId, ctx.traceId, request.callerAgent(), ctx.session, ctx),
-                    request
-            );
+        List<ToolCallResult> results = toolExecutor.executeBatch(
+                new ToolContext(ctx.sessionId, ctx.traceId, "TurnOrchestrator", ctx.session, ctx),
+                requests,
+                true
+        );
+        for (ToolCallResult result : results) {
             ctx.addToolResult(result);
             if (!result.success()) {
                 log.warn("[Orchestrator] tool failed traceId={} stage={} tool={} error={}",
                         ctx.traceId,
                         stage,
-                        request.toolName(),
+                    result.toolName(),
                         result.errorMessage());
                 continue;
             }
@@ -386,6 +344,8 @@ public class TurnOrchestrator {
 
     private void saveTrace(TurnContext ctx, long t0, long elapsed, String status) {
         try {
+            int eventHitCount = resolveEventHitCount(ctx);
+            int eventCandidateCount = resolveEventCandidateCount(ctx);
             AgentMetricsStore.TraceDetail trace = new AgentMetricsStore.TraceDetail(
                     ctx.traceId,
                     ctx.sessionId,
@@ -393,11 +353,92 @@ public class TurnOrchestrator {
                     t0,
                     elapsed,
                     status,
-                    new ArrayList<>(ctx.agentSpans)
+                    new ArrayList<>(ctx.agentSpans),
+                    resolveConflictDetected(ctx),
+                    eventHitCount > 0,
+                    eventHitCount,
+                    eventCandidateCount
             );
             metricsStore.saveTrace(trace);
         } catch (Exception e) {
             log.warn("[Orchestrator] saveTrace failed: {}", e.getMessage());
         }
+    }
+
+    private void injectMemoryHints(TurnContext ctx) {
+        CompletableFuture<List<TurnMemory>> rollingFuture = CompletableFuture.supplyAsync(
+                () -> sessionRepo.findRecentTurnMemories(ctx.sessionId, 4)
+        );
+        CompletableFuture<List<String>> episodicFuture = CompletableFuture.supplyAsync(
+                () -> sessionRepo.findRecentEpisodicSummaries(ctx.sessionId, 2)
+        );
+
+        List<TurnMemory> memories = rollingFuture.join();
+        if (!memories.isEmpty()) {
+            List<TurnContext.L0MemorySummary> memoryHints = new ArrayList<>(memories.size());
+            for (TurnMemory m : memories) {
+                memoryHints.add(new TurnContext.L0MemorySummary(
+                        m.turn(),
+                        fallbackIntent(m.intent()),
+                        Math.max(0, m.staminaLoss()),
+                        m.rewardFlags() == null ? List.of() : m.rewardFlags(),
+                        "第" + Math.max(1, m.dayIndex()) + "天 "
+                            + GameTimeFlow.phaseLabel(m.timePhase())
+                            + " · " + shorten(m.narration(), 36)
+                ));
+
+                String structuredText = "D" + Math.max(1, m.dayIndex())
+                        + "|" + GameTimeFlow.phaseLabel(m.timePhase())
+                        + "|T" + m.turn()
+                        + "|intent=" + fallbackIntent(m.intent())
+                        + "|loss=" + Math.max(0, m.staminaLoss())
+                        + "|gain=" + String.join(",", m.rewardFlags() == null ? List.of() : m.rewardFlags())
+                        + "|note=" + shorten(m.narration(), 56);
+                ctx.retrievedContexts.add(new TurnContext.RetrievedContext(
+                        "memory_l0", "turn_" + m.turn(), structuredText, 0.68
+                ));
+            }
+            ctx.rollingMemories = memoryHints;
+        }
+
+        List<String> episodic = episodicFuture.join();
+        if (!episodic.isEmpty()) {
+            ctx.episodicSummaries = episodic;
+            episodic.forEach(summary -> ctx.retrievedContexts.add(new TurnContext.RetrievedContext(
+                    "memory_l1", "episode", summary, 0.60
+            )));
+        }
+    }
+
+    private boolean resolveConflictDetected(TurnContext ctx) {
+        if (ctx.violations != null && !ctx.violations.isEmpty()) {
+            return true;
+        }
+        Object arbitration = ctx.extras.get("arbitration");
+        if (arbitration instanceof ArbitrationResult result && !result.pass()) {
+            return true;
+        }
+        Object fallbackApplied = ctx.extras.get("fallbackApplied");
+        return fallbackApplied instanceof Boolean v && v;
+    }
+
+    private int resolveEventHitCount(TurnContext ctx) {
+        if (ctx.plot == null || ctx.plot.citations() == null) {
+            return 0;
+        }
+        return (int) ctx.plot.citations().stream()
+                .filter(Objects::nonNull)
+                .filter(citation -> citation.startsWith("event_card:"))
+                .count();
+    }
+
+    private int resolveEventCandidateCount(TurnContext ctx) {
+        if (ctx.retrievedContexts == null) {
+            return 0;
+        }
+        return (int) ctx.retrievedContexts.stream()
+                .filter(Objects::nonNull)
+                .filter(item -> "event_card".equalsIgnoreCase(item.source()))
+                .count();
     }
 }

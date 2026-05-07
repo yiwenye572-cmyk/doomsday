@@ -56,6 +56,25 @@ public class MediaImageService {
     public GenerateImageResponse generateImage(GenerateImageRequest request) {
         long started = System.currentTimeMillis();
         int timeoutMs = resolveTimeout(request.timeoutMs());
+        String preferredSource = request.preferredSource() == null
+                ? "auto"
+                : request.preferredSource().trim().toLowerCase();
+
+        if ("gallery".equals(preferredSource)) {
+            List<GalleryImageItem> gallery = searchGallery(request.prompt(), 1);
+            if (gallery.isEmpty()) {
+                throw new ApiException("INTERNAL_ERROR", "gallery search failed");
+            }
+            long elapsed = System.currentTimeMillis() - started;
+            return new GenerateImageResponse(
+                    gallery.get(0).imageUrl(),
+                    "gallery",
+                    false,
+                    null,
+                    "pexels",
+                    elapsed
+            );
+        }
 
         try {
             String generatedUrl = generateWithDashScope(request.prompt(), request.style(), timeoutMs);

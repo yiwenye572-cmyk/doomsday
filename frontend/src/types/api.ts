@@ -110,6 +110,7 @@ export interface GenerateImageRequest {
   sessionId?: string;
   traceId?: string;
   prompt: string;
+  preferredSource?: "ai" | "gallery" | "auto";
   style?: string;
   timeoutMs?: number;
 }
