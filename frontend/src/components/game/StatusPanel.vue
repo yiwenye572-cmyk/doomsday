@@ -34,6 +34,14 @@ const challengePct = computed(() => {
         <span class="metric-label">回合</span>
         <strong class="metric-value">T{{ state.turn }}</strong>
       </div>
+      <div class="metric-card">
+        <span class="metric-label">日期进度</span>
+        <strong class="metric-value">D{{ state.dayIndex }} · {{ state.turnInDay }}/{{ state.turnsPerDayTarget }}</strong>
+      </div>
+      <div class="metric-card metric-card--wide">
+        <span class="metric-label">时段</span>
+        <strong class="metric-value">{{ state.timePhaseLabel }}</strong>
+      </div>
     </div>
 
     <div class="challenge" v-if="state">
@@ -76,6 +84,10 @@ const challengePct = computed(() => {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 10px;
+}
+
+.metric-card--wide {
+  grid-column: span 2;
 }
 
 .metric-card {

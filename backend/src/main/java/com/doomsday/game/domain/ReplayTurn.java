@@ -6,6 +6,8 @@ import java.util.List;
 
 public record ReplayTurn(
         int turn,
+        int dayIndex,
+        String timePhase,
         String actionType,
         String inputText,
         String selectedOptionId,

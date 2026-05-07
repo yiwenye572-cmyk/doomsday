@@ -5,6 +5,7 @@ import com.doomsday.game.agent.AgentHandler;
 import com.doomsday.game.agent.TurnContext;
 import com.doomsday.game.api.StateDeltaPayload;
 import com.doomsday.game.domain.GameSession;
+import com.doomsday.game.domain.GameTimeFlow;
 import com.doomsday.game.domain.SessionRepository;
 import java.util.List;
 import org.slf4j.Logger;
@@ -42,6 +43,7 @@ public class StateCommitAgent implements AgentHandler {
         s.setVersion(s.getVersion() + 1);
         s.setCurrentOptions(ctx.options);
         s.setChallengeIndex(computeChallengeIndex(s));
+        GameTimeFlow.advanceAfterTurn(s);
 
         // 状态 diff 摘要
         ctx.stateDelta = new StateDeltaPayload(-staminaCost, 12, List.of("found_medical_trace"));

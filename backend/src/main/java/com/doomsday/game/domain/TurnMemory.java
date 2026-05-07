@@ -5,6 +5,8 @@ package com.doomsday.game.domain;
  */
 public record TurnMemory(
         int turn,
+        int dayIndex,
+        String timePhase,
         String playerInput,
         String intent,
         int staminaLoss,

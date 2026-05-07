@@ -25,6 +25,11 @@ export interface SessionState {
   challengeBand: number[];
   turn: number;
   worldVersion: string;
+  dayIndex: number;
+  turnInDay: number;
+  turnsPerDayTarget: number;
+  timePhase: string;
+  timePhaseLabel: string;
 }
 
 export interface CreateSessionResponse {
@@ -131,6 +136,9 @@ export interface DiaryEntryView {
   level: DiaryLevel;
   fromTurn: number;
   toTurn: number;
+  dayIndex: number;
+  timePhase: string;
+  timePhaseLabel: string;
   summary: string;
   tags: string[];
   timestamp: number;

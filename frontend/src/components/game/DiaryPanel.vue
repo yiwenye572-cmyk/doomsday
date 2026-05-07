@@ -38,6 +38,13 @@ function toTime(ts: number) {
   const value = Number.isFinite(ts) ? ts : Date.now();
   return new Date(value).toLocaleString();
 }
+
+function dayPhase(row: DiaryEntryView) {
+  if (!row.dayIndex || !row.timePhaseLabel) {
+    return "";
+  }
+  return ` · 第${row.dayIndex}天 · ${row.timePhaseLabel}`;
+}
 </script>
 
 <template>
@@ -62,7 +69,7 @@ function toTime(ts: number) {
     <p class="hint error" v-else-if="error">{{ error }}</p>
     <ul class="list" v-else-if="visible.length">
       <li class="item" v-for="row in visible" :key="`${row.level}-${row.fromTurn}-${row.toTurn}-${row.timestamp}`">
-        <p class="meta">{{ row.level }} · 回合 {{ row.fromTurn }}-{{ row.toTurn }} · {{ toTime(row.timestamp) }}</p>
+        <p class="meta">{{ row.level }} · 回合 {{ row.fromTurn }}-{{ row.toTurn }}{{ dayPhase(row) }} · {{ toTime(row.timestamp) }}</p>
         <p class="summary">{{ row.summary }}</p>
         <p class="tags" v-if="row.tags.length"># {{ row.tags.join("  #") }}</p>
       </li>

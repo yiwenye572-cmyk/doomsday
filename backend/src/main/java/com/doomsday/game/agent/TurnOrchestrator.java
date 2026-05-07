@@ -16,6 +16,7 @@ import com.doomsday.game.arbitration.dto.ArbitrationResult;
 import com.doomsday.game.common.ApiException;
 import com.doomsday.game.diary.GameDiaryService;
 import com.doomsday.game.domain.GameSession;
+import com.doomsday.game.domain.GameTimeFlow;
 import com.doomsday.game.domain.SessionRepository;
 import com.doomsday.game.domain.TurnMemory;
 import com.doomsday.game.tool.ToolContext;
@@ -176,10 +177,14 @@ public class TurnOrchestrator {
                     fallbackIntent(m.intent()),
                     Math.max(0, m.staminaLoss()),
                     m.rewardFlags() == null ? List.of() : m.rewardFlags(),
-                    shorten(m.narration(), 48)
+                    "第" + Math.max(1, m.dayIndex()) + "天 "
+                        + GameTimeFlow.phaseLabel(m.timePhase())
+                        + " · " + shorten(m.narration(), 36)
             ));
 
-            String structuredText = "T" + m.turn()
+                String structuredText = "D" + Math.max(1, m.dayIndex())
+                    + "|" + GameTimeFlow.phaseLabel(m.timePhase())
+                    + "|T" + m.turn()
                     + "|intent=" + fallbackIntent(m.intent())
                     + "|loss=" + Math.max(0, m.staminaLoss())
                     + "|gain=" + String.join(",", m.rewardFlags() == null ? List.of() : m.rewardFlags())
@@ -208,6 +213,8 @@ public class TurnOrchestrator {
                 : (ctx.plot != null ? ctx.plot.text() : "");
         TurnMemory memory = new TurnMemory(
                 ctx.session.getTurn(),
+            ctx.session.getDayIndex(),
+            ctx.session.getTimePhase(),
                 ctx.playerInput,
             fallbackIntent(ctx.intent),
             resolveStaminaLoss(ctx),
@@ -370,7 +377,8 @@ public class TurnOrchestrator {
 
     private String buildEpisodicSummary(TurnContext ctx, String narration) {
         return "第" + ctx.session.getTurn()
-                + "回合: 意图=" + fallbackIntent(ctx.intent)
+            + "回合(第" + ctx.session.getDayIndex() + "天 " + GameTimeFlow.phaseLabel(ctx.session.getTimePhase()) + ")"
+            + ": 意图=" + fallbackIntent(ctx.intent)
                 + "; 体力损耗=" + resolveStaminaLoss(ctx)
                 + "; 收益=" + (resolveRewardFlags(ctx).isEmpty() ? "无" : String.join("/", resolveRewardFlags(ctx)))
                 + "; 摘要=" + shorten(narration, 64);

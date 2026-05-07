@@ -7,6 +7,7 @@ const route = useRoute();
 const router = useRouter();
 
 const text = ref("");
+const chapters = ref<string[]>([]);
 const loading = ref(false);
 const error = ref("");
 
@@ -17,6 +18,10 @@ async function loadReplay() {
   error.value = "";
   try {
     text.value = await getReplay(sessionId);
+    chapters.value = text.value
+      .split(/\n\s*\n/g)
+      .map((chunk) => chunk.trim())
+      .filter(Boolean);
   } catch (e) {
     error.value = e instanceof Error ? e.message : "回放获取失败";
   } finally {
@@ -38,7 +43,12 @@ onMounted(loadReplay);
     </header>
 
     <article class="panel replay-body" v-if="!loading && !error">
-      <pre>{{ text || "暂无回放内容" }}</pre>
+      <div class="novel" v-if="chapters.length">
+        <section class="chapter" v-for="(chapter, idx) in chapters" :key="`${idx}-${chapter.slice(0, 16)}`">
+          <p>{{ chapter }}</p>
+        </section>
+      </div>
+      <p class="empty" v-else>暂无回放内容</p>
     </article>
 
     <section class="panel replay-body" v-if="loading">回放加载中...</section>
@@ -77,11 +87,26 @@ h1 {
   padding: 20px;
 }
 
-pre {
+.novel {
+  display: grid;
+  gap: 14px;
+}
+
+.chapter {
+  border-left: 2px solid rgba(255, 255, 255, 0.08);
+  padding: 4px 0 4px 12px;
+}
+
+.chapter p {
   margin: 0;
-  white-space: pre-wrap;
+  white-space: pre-line;
   color: var(--text-01);
-  line-height: 1.75;
+  line-height: 1.8;
+}
+
+.empty {
+  margin: 0;
+  color: var(--text-03);
 }
 
 .error {

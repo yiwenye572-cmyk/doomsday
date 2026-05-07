@@ -5,6 +5,7 @@ import com.doomsday.game.agent.AgentHandler;
 import com.doomsday.game.agent.TurnContext;
 import com.doomsday.game.api.OptionPayload;
 import com.doomsday.game.common.LlmTokenEstimator;
+import com.doomsday.game.domain.GameTimeFlow;
 import com.doomsday.game.tool.dto.ToolCallRequest;
 import java.util.List;
 import java.util.Map;
@@ -31,11 +32,12 @@ public class OptionGenerationAgent implements AgentHandler {
             每个选项格式（严格 JSON）：
             {"id":"opt_a","text":"...（15-40字）","riskLevel":"HIGH|MEDIUM|MEDIUM_LOW|LOW","expectedEffect":"...（简短描述）"}
             
-            4 个选项必须覆盖：
-            - opt_a：激进高风险行动
-            - opt_b：稳健低风险行动
-            - opt_c：资源/补给导向行动
-            - opt_d：探索/侧翼行动
+            约束：
+            - 必须使用固定 id：opt_a/opt_b/opt_c/opt_d（用于前端按钮绑定）。
+            - 不要套用固定句式，不要重复上一轮选项文案。
+            - 选项要明显贴合当前剧情中的具体细节（地点、威胁、资源、天气、痕迹）。
+            - 4 个选项的策略取向要有差异，但不要求固定到某个模板。
+            - 低体力时至少给出 1 个保守选项；高威胁时至少给出 1 个高风险选项。
             
             返回格式：
             {"options":[...4个选项...]}
@@ -117,18 +119,28 @@ public class OptionGenerationAgent implements AgentHandler {
         String episodic = ctx.episodicSummaries.isEmpty()
             ? "无"
             : ctx.episodicSummaries.stream().limit(2).reduce((a, b) -> a + " | " + b).orElse("无");
+        String previousOptions = ctx.session.getCurrentOptions() == null || ctx.session.getCurrentOptions().isEmpty()
+            ? "无"
+            : ctx.session.getCurrentOptions().stream()
+            .map(o -> o.id() + ":" + o.text())
+            .reduce((a, b) -> a + " | " + b)
+            .orElse("无");
         String userPrompt = """
+            【时间】第%d天 / %s
                 【当前位置】%s
                 【玩家行动】%s
                 【剧情摘要】%s
                 【玩家状态】HP=%d 体力=%d 感染=%d
                 【背包】%s
+            【上一轮选项】%s
                 【最近记忆】%s
                 【阶段摘要】%s
                 【工具观察】%s
                 
                 请生成 4 个选项 JSON：
                 """.formatted(
+            ctx.session.getDayIndex(),
+                GameTimeFlow.phaseLabel(ctx.session.getTimePhase()),
                 ctx.session.getLocation(),
                 ctx.playerInput,
                 ctx.plot != null ? shorten(ctx.plot.text(), 120) : "（无）",
@@ -136,6 +148,7 @@ public class OptionGenerationAgent implements AgentHandler {
                 ctx.session.getStamina(),
                 ctx.session.getInfection(),
                 ctx.session.getInventory(),
+            previousOptions,
                 rollingMemory,
                 episodic,
                 toolObs
@@ -164,16 +177,17 @@ public class OptionGenerationAgent implements AgentHandler {
     private List<OptionPayload> staticFallback(TurnContext ctx) {
         String loc = humanizeLocation(ctx.session != null ? ctx.session.getLocation() : "unknown");
         String motif = extractMotif(ctx.plot == null ? "" : ctx.plot.text());
+        String phase = ctx.session == null ? "" : GameTimeFlow.phaseLabel(ctx.session.getTimePhase());
         boolean lowStamina = ctx.session != null && ctx.session.getStamina() <= 35;
         String cautiousVerb = lowStamina ? "短暂停步恢复呼吸" : "压低身形持续观察";
         String resourceHint = ctx.session != null && ctx.session.getInventory().contains("bandage")
                 ? "整理现有物资并补充缺口"
                 : "优先搜寻药品和食物";
         return List.of(
-                new OptionPayload("opt_a", "趁" + motif + "强行推进到" + loc + "深处", "HIGH", "体力:-8，可能快速突破，也可能正面遭遇威胁"),
-                new OptionPayload("opt_b", cautiousVerb + "，先确认" + loc + "周边动静", "MEDIUM_LOW", "体力:-2，推进更稳，暴露概率下降"),
-                new OptionPayload("opt_c", resourceHint + "，在" + loc + "边缘做一次补给搜索", "MEDIUM", "体力:-4，补给收益更高，但节奏放缓"),
-                new OptionPayload("opt_d", "沿" + loc + "侧翼绕行，寻找新的线索或退路", "MEDIUM", "体力:-5，可能触发支线，也可能发现隐藏入口")
+            new OptionPayload("opt_a", "在" + phase + "借" + motif + "掩护，强闯" + loc + "核心区", "HIGH", "体力:-8，推进快但威胁与噪声显著上升"),
+            new OptionPayload("opt_b", cautiousVerb + "，以最短暴露路线摸清" + loc + "敌情", "MEDIUM_LOW", "体力:-2，推进稳定，冲突概率较低"),
+            new OptionPayload("opt_c", resourceHint + "，优先排查" + loc + "可回收物资点", "MEDIUM", "体力:-4，补给收益较高，可能拖慢节奏"),
+            new OptionPayload("opt_d", "顺着" + motif + "留下的痕迹，绕至" + loc + "侧翼试探", "MEDIUM", "体力:-5，可能发现新支线或隐蔽通道")
         );
     }
 

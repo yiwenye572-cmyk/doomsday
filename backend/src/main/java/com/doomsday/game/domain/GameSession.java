@@ -3,6 +3,7 @@ package com.doomsday.game.domain;
 import com.doomsday.game.api.OptionPayload;
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -25,6 +26,10 @@ public class GameSession {
     private int comebackCardRemaining;
     private double challengeIndex;
     private List<OptionPayload> currentOptions;
+    private int dayIndex;
+    private int turnInDay;
+    private int turnsPerDayTarget;
+    private String timePhase;
 
     /** Jackson 反序列化入口 */
     @JsonCreator
@@ -42,7 +47,11 @@ public class GameSession {
             @JsonProperty("inventory") List<String> inventory,
             @JsonProperty("comebackCardRemaining") int comebackCardRemaining,
             @JsonProperty("challengeIndex") double challengeIndex,
-            @JsonProperty("currentOptions") List<OptionPayload> currentOptions) {
+            @JsonProperty("currentOptions") List<OptionPayload> currentOptions,
+            @JsonProperty("dayIndex") Integer dayIndex,
+            @JsonProperty("turnInDay") Integer turnInDay,
+            @JsonProperty("turnsPerDayTarget") Integer turnsPerDayTarget,
+            @JsonProperty("timePhase") String timePhase) {
         this.sessionId = sessionId;
         this.difficulty = difficulty;
         this.version = version;
@@ -57,6 +66,12 @@ public class GameSession {
         this.comebackCardRemaining = comebackCardRemaining;
         this.challengeIndex = challengeIndex;
         this.currentOptions = currentOptions != null ? new ArrayList<>(currentOptions) : new ArrayList<>();
+        this.dayIndex = dayIndex == null || dayIndex <= 0 ? 1 : dayIndex;
+        this.turnInDay = turnInDay == null || turnInDay <= 0 ? 1 : turnInDay;
+        this.turnsPerDayTarget = turnsPerDayTarget == null || turnsPerDayTarget < 4
+            ? randomTurnsPerDay()
+            : turnsPerDayTarget;
+        this.timePhase = (timePhase == null || timePhase.isBlank()) ? "MIDNIGHT" : timePhase;
     }
 
     /** 新建会话工厂方法 */
@@ -69,7 +84,11 @@ public class GameSession {
                 worldVersion,
                 new ArrayList<>(List.of("knife", "bandage")),
                 1, 0.5,
-                new ArrayList<>()
+                new ArrayList<>(),
+                1,
+                1,
+                randomTurnsPerDay(),
+                "MIDNIGHT"
         );
     }
 
@@ -88,6 +107,10 @@ public class GameSession {
     public int getComebackCardRemaining() { return comebackCardRemaining; }
     public double getChallengeIndex() { return challengeIndex; }
     public List<OptionPayload> getCurrentOptions() { return currentOptions; }
+    public int getDayIndex() { return dayIndex; }
+    public int getTurnInDay() { return turnInDay; }
+    public int getTurnsPerDayTarget() { return turnsPerDayTarget; }
+    public String getTimePhase() { return timePhase; }
 
     // ===== setters =====
     public void setVersion(long version) { this.version = version; }
@@ -104,4 +127,12 @@ public class GameSession {
     public void setComebackCardRemaining(int comebackCardRemaining) { this.comebackCardRemaining = comebackCardRemaining; }
     public void setChallengeIndex(double challengeIndex) { this.challengeIndex = challengeIndex; }
     public void setCurrentOptions(List<OptionPayload> currentOptions) { this.currentOptions = currentOptions; }
+    public void setDayIndex(int dayIndex) { this.dayIndex = dayIndex; }
+    public void setTurnInDay(int turnInDay) { this.turnInDay = turnInDay; }
+    public void setTurnsPerDayTarget(int turnsPerDayTarget) { this.turnsPerDayTarget = turnsPerDayTarget; }
+    public void setTimePhase(String timePhase) { this.timePhase = timePhase; }
+
+    private static int randomTurnsPerDay() {
+        return ThreadLocalRandom.current().nextInt(4, 7);
+    }
 }

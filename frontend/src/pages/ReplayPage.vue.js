@@ -4,6 +4,7 @@ import { getReplay } from "../api/game";
 const route = useRoute();
 const router = useRouter();
 const text = ref("");
+const chapters = ref([]);
 const loading = ref(false);
 const error = ref("");
 const sessionId = String(route.params.sessionId || "");
@@ -12,6 +13,10 @@ async function loadReplay() {
     error.value = "";
     try {
         text.value = await getReplay(sessionId);
+        chapters.value = text.value
+            .split(/\n\s*\n/g)
+            .map((chunk) => chunk.trim())
+            .filter(Boolean);
     }
     catch (e) {
         error.value = e instanceof Error ? e.message : "回放获取失败";
@@ -25,6 +30,7 @@ debugger; /* PartiallyEnd: #3632/scriptSetup.vue */
 const __VLS_ctx = {};
 let __VLS_components;
 let __VLS_directives;
+/** @type {__VLS_StyleScopedClasses['chapter']} */ ;
 /** @type {__VLS_StyleScopedClasses['replay-head']} */ ;
 // CSS variable injection 
 // CSS variable injection end 
@@ -50,8 +56,24 @@ if (!__VLS_ctx.loading && !__VLS_ctx.error) {
     __VLS_asFunctionalElement(__VLS_intrinsicElements.article, __VLS_intrinsicElements.article)({
         ...{ class: "panel replay-body" },
     });
-    __VLS_asFunctionalElement(__VLS_intrinsicElements.pre, __VLS_intrinsicElements.pre)({});
-    (__VLS_ctx.text || "暂无回放内容");
+    if (__VLS_ctx.chapters.length) {
+        __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
+            ...{ class: "novel" },
+        });
+        for (const [chapter, idx] of __VLS_getVForSourceType((__VLS_ctx.chapters))) {
+            __VLS_asFunctionalElement(__VLS_intrinsicElements.section, __VLS_intrinsicElements.section)({
+                ...{ class: "chapter" },
+                key: (`${idx}-${chapter.slice(0, 16)}`),
+            });
+            __VLS_asFunctionalElement(__VLS_intrinsicElements.p, __VLS_intrinsicElements.p)({});
+            (chapter);
+        }
+    }
+    else {
+        __VLS_asFunctionalElement(__VLS_intrinsicElements.p, __VLS_intrinsicElements.p)({
+            ...{ class: "empty" },
+        });
+    }
 }
 if (__VLS_ctx.loading) {
     __VLS_asFunctionalElement(__VLS_intrinsicElements.section, __VLS_intrinsicElements.section)({
@@ -72,6 +94,9 @@ if (__VLS_ctx.error) {
 /** @type {__VLS_StyleScopedClasses['btn']} */ ;
 /** @type {__VLS_StyleScopedClasses['panel']} */ ;
 /** @type {__VLS_StyleScopedClasses['replay-body']} */ ;
+/** @type {__VLS_StyleScopedClasses['novel']} */ ;
+/** @type {__VLS_StyleScopedClasses['chapter']} */ ;
+/** @type {__VLS_StyleScopedClasses['empty']} */ ;
 /** @type {__VLS_StyleScopedClasses['panel']} */ ;
 /** @type {__VLS_StyleScopedClasses['replay-body']} */ ;
 /** @type {__VLS_StyleScopedClasses['panel']} */ ;
@@ -82,7 +107,7 @@ const __VLS_self = (await import('vue')).defineComponent({
     setup() {
         return {
             router: router,
-            text: text,
+            chapters: chapters,
             loading: loading,
             error: error,
             sessionId: sessionId,

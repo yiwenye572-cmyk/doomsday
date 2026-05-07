@@ -22,6 +22,12 @@ function toTime(ts) {
     const value = Number.isFinite(ts) ? ts : Date.now();
     return new Date(value).toLocaleString();
 }
+function dayPhase(row) {
+    if (!row.dayIndex || !row.timePhaseLabel) {
+        return "";
+    }
+    return ` · 第${row.dayIndex}天 · ${row.timePhaseLabel}`;
+}
 debugger; /* PartiallyEnd: #3632/scriptSetup.vue */
 const __VLS_ctx = {};
 let __VLS_components;
@@ -79,6 +85,7 @@ else if (__VLS_ctx.visible.length) {
         (row.level);
         (row.fromTurn);
         (row.toTurn);
+        (__VLS_ctx.dayPhase(row));
         (__VLS_ctx.toTime(row.timestamp));
         __VLS_asFunctionalElement(__VLS_intrinsicElements.p, __VLS_intrinsicElements.p)({
             ...{ class: "summary" },
@@ -121,6 +128,7 @@ const __VLS_self = (await import('vue')).defineComponent({
             switchLevel: switchLevel,
             label: label,
             toTime: toTime,
+            dayPhase: dayPhase,
         };
     },
     __typeEmits: {},

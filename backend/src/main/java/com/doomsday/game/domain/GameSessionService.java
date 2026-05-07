@@ -2,6 +2,8 @@ package com.doomsday.game.domain;
 
 import com.doomsday.game.agent.TurnContext;
 import com.doomsday.game.agent.TurnOrchestrator;
+import com.doomsday.game.archive.GameArchiveService;
+import com.doomsday.game.archive.model.GameArchiveEvent;
 import com.doomsday.game.api.ChooseOptionRequest;
 import com.doomsday.game.api.ChooseOptionResponse;
 import com.doomsday.game.api.ComebackCardRequest;
@@ -26,19 +28,23 @@ public class GameSessionService {
     private final SessionRepository sessionRepo;
     private final TurnOrchestrator orchestrator;
     private final FaultInjectionGuard faultGuard;
+    private final GameArchiveService archiveService;
 
     public GameSessionService(SessionRepository sessionRepo,
                               TurnOrchestrator orchestrator,
-                              FaultInjectionGuard faultGuard) {
+                              FaultInjectionGuard faultGuard,
+                              GameArchiveService archiveService) {
         this.sessionRepo = sessionRepo;
         this.orchestrator = orchestrator;
         this.faultGuard = faultGuard;
+        this.archiveService = archiveService;
     }
 
     public CreateSessionResponse createSession(CreateSessionRequest request) {
         String sessionId = "s_" + System.currentTimeMillis() + "_" + UUID.randomUUID().toString().substring(0, 6);
         GameSession session = GameSession.create(sessionId, request.difficulty(), request.worldVersion());
         sessionRepo.save(session);
+        archiveService.persistSessionSnapshot(session);
 
         return new CreateSessionResponse(
                 sessionId,
@@ -78,6 +84,8 @@ public class GameSessionService {
         );
         sessionRepo.appendReplayTurn(sessionId, new ReplayTurn(
             response.turn(),
+            session.getDayIndex(),
+            session.getTimePhase(),
             "PLAYER_INPUT",
             request.playerInput(),
             null,
@@ -87,6 +95,20 @@ public class GameSessionService {
             response.stateDelta(),
             System.currentTimeMillis()
         ));
+        archiveService.appendReplayEvent(session, new ReplayTurn(
+                response.turn(),
+                session.getDayIndex(),
+                session.getTimePhase(),
+                "PLAYER_INPUT",
+                request.playerInput(),
+                null,
+                null,
+                response.plot() == null ? "" : response.plot().text(),
+                response.options(),
+                response.stateDelta(),
+                System.currentTimeMillis()
+        ));
+        archiveService.persistSessionSnapshot(session);
         sessionRepo.saveIdempotent(idemKey, response);
         return response;
     }
@@ -135,6 +157,8 @@ public class GameSessionService {
 
         sessionRepo.appendReplayTurn(sessionId, new ReplayTurn(
                 response.turn(),
+                session.getDayIndex(),
+                session.getTimePhase(),
                 "OPTION_CHOOSE",
                 "选择行动：" + selected.text(),
                 selected.id(),
@@ -144,49 +168,43 @@ public class GameSessionService {
                 response.stateDelta(),
                 System.currentTimeMillis()
         ));
+            archiveService.appendReplayEvent(session, new ReplayTurn(
+                response.turn(),
+                session.getDayIndex(),
+                session.getTimePhase(),
+                "OPTION_CHOOSE",
+                "选择行动：" + selected.text(),
+                selected.id(),
+                selected.text(),
+                response.plot() == null ? "" : response.plot().text(),
+                response.options(),
+                response.stateDelta(),
+                System.currentTimeMillis()
+            ));
+            archiveService.persistSessionSnapshot(session);
 
         return response;
     }
 
     public String getReplay(String sessionId, Integer fromTurn, Integer toTurn) {
-        loadSession(sessionId);
-        List<ReplayTurn> rows = sessionRepo.findReplayTurns(sessionId).stream()
-                .filter(row -> fromTurn == null || row.turn() >= fromTurn)
-                .filter(row -> toTurn == null || row.turn() <= toTurn)
-                .toList();
+        GameSession session = loadSession(sessionId);
+        List<GameArchiveEvent> rows = archiveService.findReplayEvents(sessionId, fromTurn, toTurn);
+        if (rows.isEmpty()) {
+            // 兼容迁移前旧会话，仅在归档表完全无记录时回灌一次 Redis 热数据。
+            List<GameArchiveEvent> allRows = archiveService.findReplayEvents(sessionId, null, null);
+            if (allRows.isEmpty()) {
+                sessionRepo.findReplayTurns(sessionId).forEach(row -> archiveService.appendReplayEvent(session, row));
+            }
+            rows = archiveService.findReplayEvents(sessionId, fromTurn, toTurn);
+        }
         if (rows.isEmpty()) {
             return "暂无回放数据，先完成至少一轮剧情与一次选项推进。";
         }
 
         StringBuilder text = new StringBuilder();
-        for (ReplayTurn row : rows) {
-            text.append("[T").append(row.turn()).append("] ")
-                    .append(row.actionType()).append("\n");
-            if (row.inputText() != null && !row.inputText().isBlank()) {
-                text.append("输入: ").append(row.inputText()).append("\n");
-            }
-            if (row.selectedOptionText() != null && !row.selectedOptionText().isBlank()) {
-                text.append("选择: ").append(row.selectedOptionText()).append("\n");
-            }
-            if (row.plotText() != null && !row.plotText().isBlank()) {
-                text.append("剧情: ").append(row.plotText()).append("\n");
-            }
-            if (row.options() != null && !row.options().isEmpty()) {
-                text.append("选项:\n");
-                for (OptionPayload option : row.options()) {
-                    text.append("- ").append(option.id()).append(" ")
-                            .append(option.text()).append(" [")
-                            .append(option.riskLevel()).append("]\n");
-                }
-            }
-            if (row.stateDelta() != null) {
-                text.append("状态变化: stamina ")
-                        .append(row.stateDelta().stamina())
-                        .append(", noise ")
-                        .append(row.stateDelta().noise())
-                        .append("\n");
-            }
-            text.append("\n");
+        for (GameArchiveEvent row : rows) {
+            text.append("第").append(row.getTurnNo()).append("回合").append("\n");
+            text.append(row.getNarrative()).append("\n\n");
         }
         return text.toString().trim();
     }
@@ -212,6 +230,7 @@ public class GameSessionService {
         session.setComebackCardRemaining(session.getComebackCardRemaining() - 1);
         session.setVersion(session.getVersion() + 1);
         sessionRepo.save(session);
+        archiveService.persistSessionSnapshot(session);
 
         return new ComebackCardResponse(
                 true,
@@ -251,7 +270,12 @@ public class GameSessionService {
                 s.getChallengeIndex(),
                 s.getDifficulty().challengeBand(),
                 s.getTurn(),
-                s.getWorldVersion()
+                s.getWorldVersion(),
+                s.getDayIndex(),
+                s.getTurnInDay(),
+                s.getTurnsPerDayTarget(),
+                s.getTimePhase(),
+                GameTimeFlow.phaseLabel(s.getTimePhase())
         );
     }
 

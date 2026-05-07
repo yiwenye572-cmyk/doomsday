@@ -13,5 +13,10 @@ public record SessionStateResponse(
         double challengeIndex,
         double[] challengeBand,
         int turn,
-        String worldVersion
+        String worldVersion,
+        int dayIndex,
+        int turnInDay,
+        int turnsPerDayTarget,
+        String timePhase,
+        String timePhaseLabel
 ) {}

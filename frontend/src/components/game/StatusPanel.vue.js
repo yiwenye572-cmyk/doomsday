@@ -62,6 +62,28 @@ if (__VLS_ctx.state) {
         ...{ class: "metric-value" },
     });
     (__VLS_ctx.state.turn);
+    __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
+        ...{ class: "metric-card" },
+    });
+    __VLS_asFunctionalElement(__VLS_intrinsicElements.span, __VLS_intrinsicElements.span)({
+        ...{ class: "metric-label" },
+    });
+    __VLS_asFunctionalElement(__VLS_intrinsicElements.strong, __VLS_intrinsicElements.strong)({
+        ...{ class: "metric-value" },
+    });
+    (__VLS_ctx.state.dayIndex);
+    (__VLS_ctx.state.turnInDay);
+    (__VLS_ctx.state.turnsPerDayTarget);
+    __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
+        ...{ class: "metric-card metric-card--wide" },
+    });
+    __VLS_asFunctionalElement(__VLS_intrinsicElements.span, __VLS_intrinsicElements.span)({
+        ...{ class: "metric-label" },
+    });
+    __VLS_asFunctionalElement(__VLS_intrinsicElements.strong, __VLS_intrinsicElements.strong)({
+        ...{ class: "metric-value" },
+    });
+    (__VLS_ctx.state.timePhaseLabel);
 }
 if (__VLS_ctx.state) {
     __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
@@ -123,6 +145,13 @@ else {
 /** @type {__VLS_StyleScopedClasses['metric-label']} */ ;
 /** @type {__VLS_StyleScopedClasses['metric-value']} */ ;
 /** @type {__VLS_StyleScopedClasses['metric-card']} */ ;
+/** @type {__VLS_StyleScopedClasses['metric-label']} */ ;
+/** @type {__VLS_StyleScopedClasses['metric-value']} */ ;
+/** @type {__VLS_StyleScopedClasses['metric-card']} */ ;
+/** @type {__VLS_StyleScopedClasses['metric-label']} */ ;
+/** @type {__VLS_StyleScopedClasses['metric-value']} */ ;
+/** @type {__VLS_StyleScopedClasses['metric-card']} */ ;
+/** @type {__VLS_StyleScopedClasses['metric-card--wide']} */ ;
 /** @type {__VLS_StyleScopedClasses['metric-label']} */ ;
 /** @type {__VLS_StyleScopedClasses['metric-value']} */ ;
 /** @type {__VLS_StyleScopedClasses['challenge']} */ ;

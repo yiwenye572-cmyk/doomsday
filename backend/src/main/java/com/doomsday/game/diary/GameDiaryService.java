@@ -4,6 +4,7 @@ import com.doomsday.game.diary.dto.DiaryEntryView;
 import com.doomsday.game.diary.dto.DiaryLevel;
 import com.doomsday.game.diary.model.DiaryEntryL1;
 import com.doomsday.game.diary.model.DiaryEntryL2;
+import com.doomsday.game.domain.GameTimeFlow;
 import com.doomsday.game.diary.repo.GameDiaryRepository;
 import com.doomsday.game.domain.GameSession;
 import com.doomsday.game.domain.SessionRepository;
@@ -103,6 +104,9 @@ public class GameDiaryService {
                         "L0",
                         m.turn(),
                         m.turn(),
+                    Math.max(1, m.dayIndex()),
+                    m.timePhase(),
+                    GameTimeFlow.phaseLabel(m.timePhase()),
                         compactL0(m),
                         sanitizeList(m.rewardFlags()),
                         m.timestamp()))
@@ -115,6 +119,9 @@ public class GameDiaryService {
                         "L1",
                         e.getFromTurn(),
                         e.getToTurn(),
+                    0,
+                    "",
+                    "",
                         e.getSummary(),
                         parseTags(e.getTagsJson()),
                         toEpoch(e.getCreatedAt())))
@@ -127,6 +134,9 @@ public class GameDiaryService {
                         "L2",
                         e.getFromTurn(),
                         e.getToTurn(),
+                    0,
+                    "",
+                    "",
                         e.getTopic() + "：" + e.getSummary(),
                         parseTags(e.getKeyFactsJson()),
                         toEpoch(e.getCreatedAt())))
@@ -193,6 +203,7 @@ public class GameDiaryService {
 
     private String compactL0(TurnMemory memory) {
         return "输入=" + fallback(memory.playerInput())
+            + "；时间=第" + Math.max(1, memory.dayIndex()) + "天 " + GameTimeFlow.phaseLabel(memory.timePhase())
                 + "；意图=" + fallback(memory.intent())
                 + "；体力损耗=" + Math.max(0, memory.staminaLoss())
                 + "；摘要=" + shorten(memory.narration(), 40);
