@@ -60,6 +60,7 @@ public class OptionGenerationAgent implements AgentHandler {
                 ctx.options = result.options().stream()
                         .map(o -> new OptionPayload(o.id(), o.text(), o.riskLevel(), o.expectedEffect()))
                         .toList();
+            ctx.options = diversifyAgainstPrevious(ctx, ctx.options);
                 log.debug("[{}] traceId={} options=4 (llm)", name(), ctx.traceId);
             } else {
                 log.warn("[{}] traceId={} llm returned {} options, fallback",
@@ -70,6 +71,7 @@ public class OptionGenerationAgent implements AgentHandler {
             log.warn("[{}] traceId={} llm failed, fallback: {}", name(), ctx.traceId, e.getMessage());
             ctx.options = staticFallback(ctx);
         }
+        ctx.options = diversifyAgainstPrevious(ctx, ctx.options);
         next.handle(ctx);
     }
 
@@ -105,12 +107,25 @@ public class OptionGenerationAgent implements AgentHandler {
         String toolObs = ctx.latestToolObservations(3).isEmpty()
             ? "无"
             : String.join("; ", ctx.latestToolObservations(3));
+        String rollingMemory = ctx.rollingMemories.isEmpty()
+            ? "无"
+            : ctx.rollingMemories.stream()
+                .map(m -> "T" + m.turn() + ":" + m.intent() + "/损耗" + m.staminaLoss() + "/" + m.narrationSnippet())
+                .limit(3)
+                .reduce((a, b) -> a + "; " + b)
+                .orElse("无");
+        String episodic = ctx.episodicSummaries.isEmpty()
+            ? "无"
+            : ctx.episodicSummaries.stream().limit(2).reduce((a, b) -> a + " | " + b).orElse("无");
         String userPrompt = """
                 【当前位置】%s
                 【玩家行动】%s
                 【剧情摘要】%s
                 【玩家状态】HP=%d 体力=%d 感染=%d
-            【工具观察】%s
+                【背包】%s
+                【最近记忆】%s
+                【阶段摘要】%s
+                【工具观察】%s
                 
                 请生成 4 个选项 JSON：
                 """.formatted(
@@ -119,8 +134,11 @@ public class OptionGenerationAgent implements AgentHandler {
                 ctx.plot != null ? shorten(ctx.plot.text(), 120) : "（无）",
                 ctx.session.getHp(),
                 ctx.session.getStamina(),
-            ctx.session.getInfection(),
-            toolObs
+                ctx.session.getInfection(),
+                ctx.session.getInventory(),
+                rollingMemory,
+                episodic,
+                toolObs
         );
 
             long llmStart = System.nanoTime();
@@ -144,13 +162,87 @@ public class OptionGenerationAgent implements AgentHandler {
     // ===== 静态降级 =====
 
     private List<OptionPayload> staticFallback(TurnContext ctx) {
-        String loc = ctx.session != null ? ctx.session.getLocation() : "unknown";
+        String loc = humanizeLocation(ctx.session != null ? ctx.session.getLocation() : "unknown");
+        String motif = extractMotif(ctx.plot == null ? "" : ctx.plot.text());
+        boolean lowStamina = ctx.session != null && ctx.session.getStamina() <= 35;
+        String cautiousVerb = lowStamina ? "短暂停步恢复呼吸" : "压低身形持续观察";
+        String resourceHint = ctx.session != null && ctx.session.getInventory().contains("bandage")
+                ? "整理现有物资并补充缺口"
+                : "优先搜寻药品和食物";
         return List.of(
-                new OptionPayload("opt_a", "快速突进夺取掩体，以最短路线压制威胁", "HIGH", "体力:-8，风险高，可能获得先机"),
-                new OptionPayload("opt_b", "保持低姿态潜行，观察环境再行动", "MEDIUM_LOW", "体力:-2，推进慢，遭遇率降低"),
-                new OptionPayload("opt_c", "优先搜集附近可用医疗与补给", "MEDIUM", "体力:-4，补给+，无战斗"),
-                new OptionPayload("opt_d", "绕行侧翼，寻找隐蔽入口或退路", "MEDIUM", "体力:-5，可能触发支线，也可能遇伏")
+                new OptionPayload("opt_a", "趁" + motif + "强行推进到" + loc + "深处", "HIGH", "体力:-8，可能快速突破，也可能正面遭遇威胁"),
+                new OptionPayload("opt_b", cautiousVerb + "，先确认" + loc + "周边动静", "MEDIUM_LOW", "体力:-2，推进更稳，暴露概率下降"),
+                new OptionPayload("opt_c", resourceHint + "，在" + loc + "边缘做一次补给搜索", "MEDIUM", "体力:-4，补给收益更高，但节奏放缓"),
+                new OptionPayload("opt_d", "沿" + loc + "侧翼绕行，寻找新的线索或退路", "MEDIUM", "体力:-5，可能触发支线，也可能发现隐藏入口")
         );
+    }
+
+    private List<OptionPayload> diversifyAgainstPrevious(TurnContext ctx, List<OptionPayload> current) {
+        if (current == null || current.isEmpty() || ctx.session == null || ctx.session.getCurrentOptions() == null) {
+            return current;
+        }
+        List<OptionPayload> previous = ctx.session.getCurrentOptions();
+        if (previous.isEmpty()) {
+            return current;
+        }
+
+        String suffix = buildVariationSuffix(ctx);
+        return current.stream().map(option -> {
+            OptionPayload prev = previous.stream()
+                    .filter(item -> item.id().equals(option.id()))
+                    .findFirst()
+                    .orElse(null);
+            if (prev == null || !prev.text().equals(option.text())) {
+                return option;
+            }
+            return new OptionPayload(
+                    option.id(),
+                    option.text() + suffix,
+                    option.riskLevel(),
+                    option.expectedEffect()
+            );
+        }).toList();
+    }
+
+    private String buildVariationSuffix(TurnContext ctx) {
+        String input = ctx.playerInput == null ? "" : ctx.playerInput;
+        if (input.contains("强行") || input.contains("突进") || input.contains("冲")) {
+            return "，趁余势未散";
+        }
+        if (input.contains("观察") || input.contains("潜行")) {
+            return "，借下一次空档执行";
+        }
+        if (input.contains("补给") || input.contains("搜集")) {
+            return "，优先处理新暴露的资源点";
+        }
+        return "，应对第" + (ctx.session.getTurn() + 1) + "回合新局面";
+    }
+
+    private String humanizeLocation(String location) {
+        if (location == null || location.isBlank()) {
+            return "废墟区域";
+        }
+        return switch (location) {
+            case "safe_house" -> "安全屋外围";
+            case "old_gas_station" -> "废弃加油站";
+            default -> location.replace('_', ' ');
+        };
+    }
+
+    private String extractMotif(String plotText) {
+        if (plotText == null || plotText.isBlank()) {
+            return "混乱余波";
+        }
+        if (plotText.contains("雨")) {
+            return "雨幕掩护";
+        }
+        if (plotText.contains("灯") || plotText.contains("光")) {
+            return "微弱光线";
+        }
+        if (plotText.contains("血") || plotText.contains("拖拽")) {
+            return "残留痕迹";
+        }
+        return shorten(plotText, 8);
     }
 
     private String shorten(String text, int max) {

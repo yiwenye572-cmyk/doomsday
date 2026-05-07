@@ -65,8 +65,7 @@ public class GameSessionController {
             @RequestParam(required = false) Integer fromTurn,
             @RequestParam(required = false) Integer toTurn
     ) {
-        String data = "MVP阶段暂未落库回放，sessionId=" + sessionId + ", fromTurn=" + fromTurn + ", toTurn=" + toTurn;
-        return ApiResponse.ok(data, traceId());
+        return ApiResponse.ok(service.getReplay(sessionId, fromTurn, toTurn), traceId());
     }
 
     private String traceId() {

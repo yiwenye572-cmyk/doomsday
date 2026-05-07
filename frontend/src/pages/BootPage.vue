@@ -1,13 +1,14 @@
 <script setup lang="ts">
-import { reactive, ref } from "vue";
+import { onMounted, reactive, ref } from "vue";
 import { useRouter } from "vue-router";
-import { createSession } from "../api/game";
+import { createSession, getSessionState } from "../api/game";
 import { getDefaultWorld } from "../api/world";
 import type { CreateSessionRequest } from "../types/api";
 
 const router = useRouter();
 const loading = ref(false);
 const error = ref("");
+const resumeSessionId = ref("");
 
 const form = reactive<CreateSessionRequest>({
   playerId: "u_1001",
@@ -36,11 +37,34 @@ async function loadWorldVersion() {
   }
 }
 
+async function loadResumeSession() {
+  const lastSessionId = localStorage.getItem("doomsday:lastSessionId") || "";
+  if (!lastSessionId) {
+    return;
+  }
+  try {
+    await getSessionState(lastSessionId);
+    resumeSessionId.value = lastSessionId;
+  } catch {
+    resumeSessionId.value = "";
+  }
+}
+
 function goWorldFactory() {
   router.push("/world-factory");
 }
 
+function resumeGame() {
+  if (!resumeSessionId.value) {
+    return;
+  }
+  router.push(`/game/${resumeSessionId.value}`);
+}
+
 loadWorldVersion().catch(() => {});
+onMounted(() => {
+  loadResumeSession().catch(() => {});
+});
 
 async function startGame() {
   if (loading.value) {
@@ -98,6 +122,7 @@ async function startGame() {
 
       <div class="actions">
         <button class="btn" @click="goWorldFactory">世界工厂</button>
+        <button v-if="resumeSessionId" class="btn" @click="resumeGame">继续上次会话</button>
         <button class="btn btn--accent" @click="startGame" :disabled="loading">
           {{ loading ? "创建中..." : "进入游戏" }}
         </button>

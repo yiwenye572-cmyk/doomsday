@@ -85,6 +85,9 @@ export interface ChooseOptionResponse {
   applied: boolean;
   newVersion: number;
   stateDelta: StateDeltaPayload;
+  plot: PlotPayload;
+  options: OptionPayload[];
+  difficultyDelta: DifficultyDeltaPayload;
 }
 
 export interface ComebackCardRequest {

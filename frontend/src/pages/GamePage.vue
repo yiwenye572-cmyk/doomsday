@@ -87,13 +87,15 @@ async function handleChoose(optionId: string) {
   notice.value = "";
   try {
     const turn = state.value.turn;
-    await chooseOption(sessionId.value, turn, {
+    const data = await chooseOption(sessionId.value, turn, {
       expectedVersion: state.value.version,
       optionId,
     });
+    plot.value = data.plot;
+    options.value = data.options;
     await refreshState();
     await refreshDiary();
-    await fetchImageForPlot(plot.value);
+    await fetchImageForPlot(data.plot);
   } catch (e) {
     await handleError(e);
   } finally {

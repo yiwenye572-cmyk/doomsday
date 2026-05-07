@@ -269,12 +269,16 @@ public class TurnOrchestrator {
     }
 
     private void applyFallback(TurnContext ctx) {
+        String loc = humanizeLocation(ctx.session.getLocation());
+        String motif = extractMotif(ctx.plot == null ? "" : ctx.plot.text());
+        boolean lowStamina = ctx.session.getStamina() <= 35;
         ctx.options = List.of(
-                new OptionPayload("opt_a", "快速突进并夺取掩体", "HIGH", "stamina:-8, risk:high"),
-                new OptionPayload("opt_b", "保持潜行并观察敌情", "MEDIUM_LOW", "stamina:-2, risk:low"),
-                new OptionPayload("opt_c", "优先搜集医疗与补给", "MEDIUM", "stamina:-4, loot:+"),
-                new OptionPayload("opt_d", "转移至侧翼寻找退路", "MEDIUM", "stamina:-5, safety:+")
+            new OptionPayload("opt_a", "借" + motif + "强冲进" + loc + "更深处", "HIGH", "stamina:-8, risk:high"),
+            new OptionPayload("opt_b", (lowStamina ? "先贴墙停步" : "继续低姿潜行") + "，观察" + loc + "敌情", "MEDIUM_LOW", "stamina:-2, risk:low"),
+            new OptionPayload("opt_c", "沿" + loc + "边缘搜集医疗与补给", "MEDIUM", "stamina:-4, loot:+"),
+            new OptionPayload("opt_d", "转向" + loc + "侧翼，寻找新的退路与线索", "MEDIUM", "stamina:-5, safety:+")
         );
+        ctx.options = diversifyFallbackAgainstPrevious(ctx, ctx.options);
 
         String base = (ctx.plot != null && ctx.plot.text() != null && !ctx.plot.text().isBlank())
                 ? ctx.plot.text()
@@ -286,6 +290,50 @@ public class TurnOrchestrator {
         ctx.rulesPassed = true;
         ctx.extras.put("fallbackApplied", true);
         ctx.extras.put("fallbackViolations", new ArrayList<>(ctx.violations));
+    }
+
+    private String humanizeLocation(String location) {
+        if (location == null || location.isBlank()) {
+            return "废墟区域";
+        }
+        return switch (location) {
+            case "safe_house" -> "安全屋外围";
+            case "old_gas_station" -> "废弃加油站";
+            default -> location.replace('_', ' ');
+        };
+    }
+
+    private String extractMotif(String plotText) {
+        if (plotText == null || plotText.isBlank()) {
+            return "混乱余波";
+        }
+        if (plotText.contains("雨")) {
+            return "雨幕";
+        }
+        if (plotText.contains("灯") || plotText.contains("光")) {
+            return "微光";
+        }
+        if (plotText.contains("血") || plotText.contains("拖拽")) {
+            return "痕迹";
+        }
+        return shorten(plotText, 6);
+    }
+
+    private List<OptionPayload> diversifyFallbackAgainstPrevious(TurnContext ctx, List<OptionPayload> current) {
+        if (ctx.session == null || ctx.session.getCurrentOptions() == null || ctx.session.getCurrentOptions().isEmpty()) {
+            return current;
+        }
+        String suffix = "，切换到第" + (ctx.session.getTurn() + 1) + "回合保守策略";
+        return current.stream().map(option -> {
+            OptionPayload previous = ctx.session.getCurrentOptions().stream()
+                    .filter(item -> item.id().equals(option.id()))
+                    .findFirst()
+                    .orElse(null);
+            if (previous == null || !previous.text().equals(option.text())) {
+                return option;
+            }
+            return new OptionPayload(option.id(), option.text() + suffix, option.riskLevel(), option.expectedEffect());
+        }).toList();
     }
 
     private String shorten(String text, int maxLen) {

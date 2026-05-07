@@ -23,10 +23,12 @@ public class SessionRepository implements SessionIndexProvider {
     private static final String IDEM_PREFIX = "game:idem:";
     private static final String MEMORY_PREFIX = "game:memory:";
     private static final String EPISODIC_PREFIX = "game:memory:l1:";
+    private static final String REPLAY_PREFIX = "game:replay:";
     private static final String SESSION_INDEX_KEY = "game:session:index";
     private static final Duration SESSION_TTL = Duration.ofHours(24);
     private static final int MEMORY_WINDOW = 6;
     private static final int EPISODIC_WINDOW = 20;
+    private static final int REPLAY_WINDOW = 200;
 
     private final StringRedisTemplate redis;
     private final ObjectMapper objectMapper;
@@ -137,6 +139,36 @@ public class SessionRepository implements SessionIndexProvider {
             return List.of();
         }
         return rows.stream().filter(s -> s != null && !s.isBlank()).toList();
+    }
+
+    public void appendReplayTurn(String sessionId, ReplayTurn replayTurn) {
+        try {
+            String key = REPLAY_PREFIX + sessionId;
+            String json = objectMapper.writeValueAsString(replayTurn);
+            redis.opsForList().rightPush(key, json);
+            redis.opsForList().trim(key, -REPLAY_WINDOW, -1);
+            redis.expire(key, SESSION_TTL);
+        } catch (Exception e) {
+            throw new RuntimeException("failed to append replay turn: " + sessionId, e);
+        }
+    }
+
+    public List<ReplayTurn> findReplayTurns(String sessionId) {
+        String key = REPLAY_PREFIX + sessionId;
+        List<String> rows = redis.opsForList().range(key, 0, -1);
+        if (rows == null || rows.isEmpty()) {
+            return List.of();
+        }
+
+        List<ReplayTurn> parsed = new ArrayList<>(rows.size());
+        for (String json : rows) {
+            try {
+                parsed.add(objectMapper.readValue(json, ReplayTurn.class));
+            } catch (Exception ignored) {
+                // 单条损坏不影响回放读取
+            }
+        }
+        return parsed;
     }
 
     @Override

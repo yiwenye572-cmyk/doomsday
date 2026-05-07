@@ -1,10 +1,11 @@
-import { reactive, ref } from "vue";
+import { onMounted, reactive, ref } from "vue";
 import { useRouter } from "vue-router";
-import { createSession } from "../api/game";
+import { createSession, getSessionState } from "../api/game";
 import { getDefaultWorld } from "../api/world";
 const router = useRouter();
 const loading = ref(false);
 const error = ref("");
+const resumeSessionId = ref("");
 const form = reactive({
     playerId: "u_1001",
     difficulty: "SURVIVOR",
@@ -30,10 +31,32 @@ async function loadWorldVersion() {
         form.worldVersion = "world_v1";
     }
 }
+async function loadResumeSession() {
+    const lastSessionId = localStorage.getItem("doomsday:lastSessionId") || "";
+    if (!lastSessionId) {
+        return;
+    }
+    try {
+        await getSessionState(lastSessionId);
+        resumeSessionId.value = lastSessionId;
+    }
+    catch {
+        resumeSessionId.value = "";
+    }
+}
 function goWorldFactory() {
     router.push("/world-factory");
 }
+function resumeGame() {
+    if (!resumeSessionId.value) {
+        return;
+    }
+    router.push(`/game/${resumeSessionId.value}`);
+}
 loadWorldVersion().catch(() => { });
+onMounted(() => {
+    loadResumeSession().catch(() => { });
+});
 async function startGame() {
     if (loading.value) {
         return;
@@ -123,6 +146,12 @@ __VLS_asFunctionalElement(__VLS_intrinsicElements.button, __VLS_intrinsicElement
     ...{ onClick: (__VLS_ctx.goWorldFactory) },
     ...{ class: "btn" },
 });
+if (__VLS_ctx.resumeSessionId) {
+    __VLS_asFunctionalElement(__VLS_intrinsicElements.button, __VLS_intrinsicElements.button)({
+        ...{ onClick: (__VLS_ctx.resumeGame) },
+        ...{ class: "btn" },
+    });
+}
 __VLS_asFunctionalElement(__VLS_intrinsicElements.button, __VLS_intrinsicElements.button)({
     ...{ onClick: (__VLS_ctx.startGame) },
     ...{ class: "btn btn--accent" },
@@ -152,6 +181,7 @@ if (__VLS_ctx.error) {
 /** @type {__VLS_StyleScopedClasses['actions']} */ ;
 /** @type {__VLS_StyleScopedClasses['btn']} */ ;
 /** @type {__VLS_StyleScopedClasses['btn']} */ ;
+/** @type {__VLS_StyleScopedClasses['btn']} */ ;
 /** @type {__VLS_StyleScopedClasses['btn--accent']} */ ;
 /** @type {__VLS_StyleScopedClasses['error']} */ ;
 var __VLS_dollars;
@@ -160,9 +190,11 @@ const __VLS_self = (await import('vue')).defineComponent({
         return {
             loading: loading,
             error: error,
+            resumeSessionId: resumeSessionId,
             form: form,
             difficultyOptions: difficultyOptions,
             goWorldFactory: goWorldFactory,
+            resumeGame: resumeGame,
             startGame: startGame,
         };
     },

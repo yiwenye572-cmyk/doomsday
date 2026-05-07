@@ -76,6 +76,17 @@ public class GameSessionService {
                 ctx.difficultyDelta,
                 ctx.stateDelta != null ? ctx.stateDelta : new StateDeltaPayload(-6, 12, List.of())
         );
+        sessionRepo.appendReplayTurn(sessionId, new ReplayTurn(
+            response.turn(),
+            "PLAYER_INPUT",
+            request.playerInput(),
+            null,
+            null,
+            response.plot() == null ? "" : response.plot().text(),
+            response.options(),
+            response.stateDelta(),
+            System.currentTimeMillis()
+        ));
         sessionRepo.saveIdempotent(idemKey, response);
         return response;
     }
@@ -103,16 +114,81 @@ public class GameSessionService {
         };
 
         session.setStamina(Math.max(0, session.getStamina() + staminaDelta));
-        session.setVersion(session.getVersion() + 1);
-        sessionRepo.save(session);
+        TurnContext ctx = orchestrator.run(
+                sessionId,
+                session,
+                "选择行动：" + selected.text(),
+                "choose-" + turn + "-" + selected.id()
+        );
 
-        return new ChooseOptionResponse(
-                turn,
+        StateDeltaPayload combinedStateDelta = mergeStateDelta(staminaDelta, ctx.stateDelta);
+        ChooseOptionResponse response = new ChooseOptionResponse(
+                session.getTurn(),
                 selected.id(),
                 true,
                 session.getVersion(),
-                new StateDeltaPayload(staminaDelta, 0, List.of())
+                combinedStateDelta,
+                ctx.plot,
+                ctx.options,
+                ctx.difficultyDelta
         );
+
+        sessionRepo.appendReplayTurn(sessionId, new ReplayTurn(
+                response.turn(),
+                "OPTION_CHOOSE",
+                "选择行动：" + selected.text(),
+                selected.id(),
+                selected.text(),
+                response.plot() == null ? "" : response.plot().text(),
+                response.options(),
+                response.stateDelta(),
+                System.currentTimeMillis()
+        ));
+
+        return response;
+    }
+
+    public String getReplay(String sessionId, Integer fromTurn, Integer toTurn) {
+        loadSession(sessionId);
+        List<ReplayTurn> rows = sessionRepo.findReplayTurns(sessionId).stream()
+                .filter(row -> fromTurn == null || row.turn() >= fromTurn)
+                .filter(row -> toTurn == null || row.turn() <= toTurn)
+                .toList();
+        if (rows.isEmpty()) {
+            return "暂无回放数据，先完成至少一轮剧情与一次选项推进。";
+        }
+
+        StringBuilder text = new StringBuilder();
+        for (ReplayTurn row : rows) {
+            text.append("[T").append(row.turn()).append("] ")
+                    .append(row.actionType()).append("\n");
+            if (row.inputText() != null && !row.inputText().isBlank()) {
+                text.append("输入: ").append(row.inputText()).append("\n");
+            }
+            if (row.selectedOptionText() != null && !row.selectedOptionText().isBlank()) {
+                text.append("选择: ").append(row.selectedOptionText()).append("\n");
+            }
+            if (row.plotText() != null && !row.plotText().isBlank()) {
+                text.append("剧情: ").append(row.plotText()).append("\n");
+            }
+            if (row.options() != null && !row.options().isEmpty()) {
+                text.append("选项:\n");
+                for (OptionPayload option : row.options()) {
+                    text.append("- ").append(option.id()).append(" ")
+                            .append(option.text()).append(" [")
+                            .append(option.riskLevel()).append("]\n");
+                }
+            }
+            if (row.stateDelta() != null) {
+                text.append("状态变化: stamina ")
+                        .append(row.stateDelta().stamina())
+                        .append(", noise ")
+                        .append(row.stateDelta().noise())
+                        .append("\n");
+            }
+            text.append("\n");
+        }
+        return text.toString().trim();
     }
 
     public ComebackCardResponse useComebackCard(String sessionId, ComebackCardRequest request) {
@@ -177,6 +253,15 @@ public class GameSessionService {
                 s.getTurn(),
                 s.getWorldVersion()
         );
+    }
+
+    private StateDeltaPayload mergeStateDelta(int selectedStaminaDelta, StateDeltaPayload orchestrated) {
+        int noise = orchestrated == null ? 0 : orchestrated.noise();
+        List<String> flags = orchestrated == null || orchestrated.flagsAdded() == null
+                ? List.of()
+                : orchestrated.flagsAdded();
+        int stamina = selectedStaminaDelta + (orchestrated == null ? 0 : orchestrated.stamina());
+        return new StateDeltaPayload(stamina, noise, flags);
     }
 
 }
