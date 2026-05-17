@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, ref } from "vue";
 import type { SessionState } from "../../types/api";
+import { restCabin } from "../../api/game";
 
 const props = defineProps<{
   state: SessionState | null;
@@ -12,6 +13,33 @@ const challengePct = computed(() => {
   }
   return Math.max(0, Math.min(100, Math.round(props.state.challengeIndex * 100)));
 });
+
+const isResting = ref(false);
+const updated = ref<{ stamina: number; time: string } | null>(null);
+
+const displayStamina = computed(() => {
+  if (updated.value) return updated.value.stamina;
+  return props.state ? props.state.stamina : 0;
+});
+
+const displayTimeLabel = computed(() => {
+  if (updated.value) return updated.value.time;
+  return props.state ? props.state.timePhaseLabel : "-";
+});
+
+async function doRest() {
+  if (!props.state) return;
+  isResting.value = true;
+  try {
+    const resp = await restCabin(props.state.sessionId, 1, "afternoon");
+    const apiPayload = (resp.data as any).data;
+    updated.value = { stamina: apiPayload.updatedStamina, time: apiPayload.updatedTimeOfDay };
+  } catch (e) {
+    console.error("rest failed", e);
+  } finally {
+    isResting.value = false;
+  }
+}
 </script>
 
 <template>
@@ -24,7 +52,7 @@ const challengePct = computed(() => {
       </div>
       <div class="metric-card">
         <span class="metric-label">体力</span>
-        <strong class="metric-value">{{ state.stamina }}</strong>
+        <strong class="metric-value">{{ displayStamina }}</strong>
       </div>
       <div class="metric-card">
         <span class="metric-label">感染</span>
@@ -40,7 +68,7 @@ const challengePct = computed(() => {
       </div>
       <div class="metric-card metric-card--wide">
         <span class="metric-label">时段</span>
-        <strong class="metric-value">{{ state.timePhaseLabel }}</strong>
+        <strong class="metric-value">{{ displayTimeLabel }}</strong>
       </div>
     </div>
 
@@ -60,6 +88,11 @@ const challengePct = computed(() => {
       <div class="bag-tags">
         <span class="tag" v-for="item in state.inventory" :key="item">{{ item }}</span>
       </div>
+    </div>
+
+    <div class="actions" v-if="state">
+      <button class="btn" @click="doRest" :disabled="isResting">{{ isResting ? '休息中...' : '休息 (+1h)' }}</button>
+      <p class="meta" v-if="updated">休息完成：体力 {{ updated.stamina }}，时段 {{ updated.time }}</p>
     </div>
 
     <p class="meta" v-else>状态尚未加载。</p>

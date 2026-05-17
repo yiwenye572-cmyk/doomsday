@@ -72,3 +72,11 @@ export async function getReplay(
   });
   return response.data.data;
 }
+
+export const restCabin = (sessionId: string, durationHours: number, newTimeOfDay: string) => {
+  return http.post('/game/cabin/rest', {
+    sessionId,
+    durationHours,
+    newTimeOfDay
+  });
+};

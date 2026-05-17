@@ -48,3 +48,15 @@ services:
       interval: 5s
       timeout: 3s
       retries: 10
+
+  test-runner:
+    image: maven:3.9.9-eclipse-temurin-17
+    container_name: doomsday-test-runner
+    working_dir: /workspace/backend
+    volumes:
+      - ./backend:/workspace/backend
+    network_mode: bridge
+    depends_on:
+      - postgres
+      - redis
+    command: ["/bin/sh", "-c", "cd /workspace/backend && mvn -Dtest=CabinRestControllerTest test"]
