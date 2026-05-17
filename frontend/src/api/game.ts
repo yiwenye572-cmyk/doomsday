@@ -141,3 +141,38 @@ export async function returnCabinItems(
   return (response.data as ApiResponse<CabinState>).data;
 }
 
+// ─── Item Story API ───────────────────────────────────────────────────────
+
+export interface ItemStoryResult {
+  taskId: number | null;
+  sessionId: string;
+  itemId: string;
+  status: "PENDING" | "RUNNING" | "DONE" | "FAILED";
+  story: string | null;
+  errorMessage: string | null;
+  generatedAt: string | null;
+}
+
+/**
+ * 查询/触发物品叙事生成。
+ * - 首次调用：后端创建任务，返回 HTTP 202 + status=PENDING
+ * - 轮询调用：返回当前 status（RUNNING/DONE/FAILED）
+ * - DONE：story 字段包含叙事文本
+ * @param accepted  输出参数，表示是否返回了 202（由 axios 响应状态判断）
+ */
+export async function getItemStory(
+  sessionId: string,
+  itemId: string,
+  itemType?: string,
+  itemMetadata?: string,
+): Promise<{ accepted: boolean; data: ItemStoryResult }> {
+  const response = await http.get<ApiResponse<ItemStoryResult>>(
+    `/game/sessions/${sessionId}/items/${itemId}/story`,
+    { params: { itemType, itemMetadata }, validateStatus: (s) => s < 500 },
+  );
+  return {
+    accepted: response.status === 202,
+    data: response.data.data,
+  };
+}
+

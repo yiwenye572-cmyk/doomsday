@@ -68,4 +68,18 @@ export async function returnCabinItems(sessionId, foundItems) {
     });
     return response.data.data;
 }
+/**
+ * 查询/触发物品叙事生成。
+ * - 首次调用：后端创建任务，返回 HTTP 202 + status=PENDING
+ * - 轮询调用：返回当前 status（RUNNING/DONE/FAILED）
+ * - DONE：story 字段包含叙事文本
+ * @param accepted  输出参数，表示是否返回了 202（由 axios 响应状态判断）
+ */
+export async function getItemStory(sessionId, itemId, itemType, itemMetadata) {
+    const response = await http.get(`/game/sessions/${sessionId}/items/${itemId}/story`, { params: { itemType, itemMetadata }, validateStatus: (s) => s < 500 });
+    return {
+        accepted: response.status === 202,
+        data: response.data.data,
+    };
+}
 //# sourceMappingURL=game.js.map

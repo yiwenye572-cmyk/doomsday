@@ -1,2 +1,3 @@
 /workspace/backend/src/test/java/com/doomsday/game/api/GameSessionControllerTest.java
 /workspace/backend/src/test/java/com/doomsday/game/cabin/CabinRestControllerTest.java
+/workspace/backend/src/test/java/com/doomsday/game/cabin/ItemStoryControllerTest.java

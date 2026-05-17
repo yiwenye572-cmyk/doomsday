@@ -59,4 +59,4 @@ services:
     depends_on:
       - postgres
       - redis
-    command: ["/bin/sh", "-c", "cd /workspace/backend && mvn -Dtest=CabinRestControllerTest test"]
+    command: ["/bin/sh", "-c", "cd /workspace/backend && mvn -Dtest=CabinRestControllerTest,ItemStoryControllerTest test"]

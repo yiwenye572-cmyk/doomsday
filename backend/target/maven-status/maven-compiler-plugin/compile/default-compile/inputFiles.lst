@@ -47,6 +47,11 @@
 /workspace/backend/src/main/java/com/doomsday/game/cabin/CabinRestController.java
 /workspace/backend/src/main/java/com/doomsday/game/cabin/CabinRestService.java
 /workspace/backend/src/main/java/com/doomsday/game/cabin/CabinService.java
+/workspace/backend/src/main/java/com/doomsday/game/cabin/ItemStoryController.java
+/workspace/backend/src/main/java/com/doomsday/game/cabin/ItemStoryEntity.java
+/workspace/backend/src/main/java/com/doomsday/game/cabin/ItemStoryRepository.java
+/workspace/backend/src/main/java/com/doomsday/game/cabin/ItemStoryService.java
+/workspace/backend/src/main/java/com/doomsday/game/cabin/ItemStoryWorker.java
 /workspace/backend/src/main/java/com/doomsday/game/cabin/dto/CabinRestRequest.java
 /workspace/backend/src/main/java/com/doomsday/game/cabin/dto/CabinRestResponse.java
 /workspace/backend/src/main/java/com/doomsday/game/cabin/dto/CabinReturnRequest.java
@@ -55,6 +60,7 @@
 /workspace/backend/src/main/java/com/doomsday/game/cabin/dto/CabinTakeRequest.java
 /workspace/backend/src/main/java/com/doomsday/game/cabin/dto/CabinUpdateRequest.java
 /workspace/backend/src/main/java/com/doomsday/game/cabin/dto/CabinUpdateResponse.java
+/workspace/backend/src/main/java/com/doomsday/game/cabin/dto/ItemStoryResponse.java
 /workspace/backend/src/main/java/com/doomsday/game/common/ApiException.java
 /workspace/backend/src/main/java/com/doomsday/game/common/ApiResponse.java
 /workspace/backend/src/main/java/com/doomsday/game/common/FaultInjectionGuard.java
