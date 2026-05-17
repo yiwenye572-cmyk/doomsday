@@ -61,6 +61,16 @@
 /workspace/backend/src/main/java/com/doomsday/game/cabin/dto/CabinUpdateRequest.java
 /workspace/backend/src/main/java/com/doomsday/game/cabin/dto/CabinUpdateResponse.java
 /workspace/backend/src/main/java/com/doomsday/game/cabin/dto/ItemStoryResponse.java
+/workspace/backend/src/main/java/com/doomsday/game/cabin/recommendation/LayoutRecommendationEngine.java
+/workspace/backend/src/main/java/com/doomsday/game/cabin/recommendation/LayoutRecommendationResponse.java
+/workspace/backend/src/main/java/com/doomsday/game/cabin/recommendation/LayoutRule.java
+/workspace/backend/src/main/java/com/doomsday/game/cabin/recommendation/RecommendationController.java
+/workspace/backend/src/main/java/com/doomsday/game/cabin/recommendation/RecommendationService.java
+/workspace/backend/src/main/java/com/doomsday/game/cabin/recommendation/RecommendedItem.java
+/workspace/backend/src/main/java/com/doomsday/game/cabin/recommendation/rules/LowStaminaBedRule.java
+/workspace/backend/src/main/java/com/doomsday/game/cabin/recommendation/rules/SupplyNearBedRule.java
+/workspace/backend/src/main/java/com/doomsday/game/cabin/recommendation/rules/WeaponNearExitRule.java
+/workspace/backend/src/main/java/com/doomsday/game/cabin/recommendation/rules/WindowLightRule.java
 /workspace/backend/src/main/java/com/doomsday/game/common/ApiException.java
 /workspace/backend/src/main/java/com/doomsday/game/common/ApiResponse.java
 /workspace/backend/src/main/java/com/doomsday/game/common/FaultInjectionGuard.java

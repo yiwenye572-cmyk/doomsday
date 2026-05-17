@@ -1,3 +1,4 @@
+com/doomsday/game/api/GameSessionControllerTest.class
 com/doomsday/game/cabin/CabinRestControllerTest.class
 com/doomsday/game/cabin/ItemStoryControllerTest.class
-com/doomsday/game/api/GameSessionControllerTest.class
+com/doomsday/game/cabin/recommendation/RecommendationControllerTest.class

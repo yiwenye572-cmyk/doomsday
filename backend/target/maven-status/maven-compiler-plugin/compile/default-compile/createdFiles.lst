@@ -13,6 +13,7 @@ com/doomsday/game/common/LlmTokenEstimator.class
 com/doomsday/game/agent/impl/RetrievalAgent.class
 com/doomsday/game/common/ApiException.class
 com/doomsday/game/agent/TurnContext$LlmMetricAgg.class
+com/doomsday/game/cabin/recommendation/LayoutRecommendationResponse.class
 com/doomsday/game/tool/runtime/ToolCompensationHandler.class
 com/doomsday/game/cabin/ItemStoryWorker.class
 com/doomsday/game/arbitration/dto/ArbitrationResult.class
@@ -22,8 +23,10 @@ com/doomsday/game/media/GenerateImageResponse.class
 com/doomsday/game/worldfactory/WorldFactoryJobWorker.class
 com/doomsday/game/diary/GameDiaryService.class
 com/doomsday/game/cabin/ItemStoryService$1.class
+com/doomsday/game/cabin/recommendation/rules/LowStaminaBedRule.class
 com/doomsday/game/common/RetryExecutor.class
 com/doomsday/game/media/MediaImageService.class
+com/doomsday/game/cabin/recommendation/LayoutRecommendationEngine$RecommendationResult.class
 com/doomsday/game/config/AiConfig.class
 com/doomsday/game/diary/model/DiaryEntryL2.class
 com/doomsday/game/tool/runtime/ToolAuditService.class
@@ -64,6 +67,7 @@ com/doomsday/game/common/ApiResponse.class
 com/doomsday/game/diary/GameDiaryService$SummaryResult.class
 com/doomsday/game/cabin/ItemStoryEntity.class
 com/doomsday/game/world/LorebookEntry.class
+com/doomsday/game/cabin/recommendation/RecommendedItem.class
 com/doomsday/game/agent/impl/OptionGenerationAgent$OptionItem.class
 com/doomsday/game/worldfactory/dto/WorldFactoryJobRequest.class
 com/doomsday/game/diary/dto/DiaryEntryView.class
@@ -87,8 +91,10 @@ com/doomsday/game/diary/repo/GameDiaryL2Repository.class
 com/doomsday/game/tool/runtime/ToolCompensationHandler$SessionSnapshot.class
 com/doomsday/game/api/StateDeltaPayload.class
 com/doomsday/game/cabin/CabinRestService.class
+com/doomsday/game/cabin/recommendation/LayoutRule.class
 com/doomsday/game/tool/model/ToolCallAudit.class
 com/doomsday/game/agent/impl/OptionGenerationAgent.class
+com/doomsday/game/cabin/recommendation/RecommendationController.class
 com/doomsday/game/DoomsdayGameApplication.class
 com/doomsday/game/media/GalleryImageItem.class
 com/doomsday/game/common/GlobalExceptionHandler.class
@@ -99,12 +105,14 @@ com/doomsday/game/cabin/CabinRestController.class
 com/doomsday/game/diary/DiarySummaryScheduler.class
 com/doomsday/game/arbitration/dto/ArbitrationRequest.class
 com/doomsday/game/api/SubmitTurnRequest.class
+com/doomsday/game/cabin/recommendation/rules/WeaponNearExitRule.class
 com/doomsday/game/worldfactory/WorldSourceType.class
 com/doomsday/game/agent/impl/RouterAgent$RouterOutput.class
 com/doomsday/game/cabin/dto/CabinReturnRequest.class
 com/doomsday/game/admin/AgentMetricsStore$AgentSpan.class
 com/doomsday/game/agent/impl/RouterAgent.class
 com/doomsday/game/api/SessionStateResponse.class
+com/doomsday/game/cabin/recommendation/rules/SupplyNearBedRule.class
 com/doomsday/game/agent/impl/OptionGenerationAgent$ToolPlan.class
 com/doomsday/game/tool/ToolExecutor.class
 com/doomsday/game/domain/Difficulty$1.class
@@ -116,9 +124,11 @@ com/doomsday/game/diary/repo/GameDiaryRepository.class
 com/doomsday/game/agent/impl/PlotGenerationAgent$ToolPlan.class
 com/doomsday/game/common/TraceIdSupport.class
 com/doomsday/game/arbitration/RuleValidationLayer.class
+com/doomsday/game/cabin/recommendation/RecommendationService.class
 com/doomsday/game/diary/GameDiaryController.class
 com/doomsday/game/world/LorebookEntryRepository.class
 com/doomsday/game/cabin/dto/CabinUpdateRequest.class
+com/doomsday/game/cabin/recommendation/LayoutRecommendationEngine.class
 com/doomsday/game/tool/dto/ToolCallRequest.class
 com/doomsday/game/archive/repo/GameArchiveSessionRepository.class
 com/doomsday/game/cabin/dto/CabinTakeRequest.class
@@ -134,6 +144,7 @@ com/doomsday/game/api/OptionPayload.class
 com/doomsday/game/admin/CacheMetricsStore$CacheSnapshot.class
 com/doomsday/game/arbitration/ConflictArbitrator.class
 com/doomsday/game/diary/repo/GameDiaryL1Repository.class
+com/doomsday/game/cabin/recommendation/rules/WindowLightRule.class
 com/doomsday/game/tool/ToolController.class
 com/doomsday/game/arbitration/ArbitrationController.class
 com/doomsday/game/tool/impl/MemoryRecallTool.class

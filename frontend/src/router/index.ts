@@ -28,6 +28,11 @@ const router = createRouter({
       name: "world-factory",
       component: () => import("../pages/WorldFactoryPage.vue"),
     },
+    {
+      path: "/cabin/:sessionId?",
+      name: "cabin",
+      component: () => import("../pages/CabinDemoPage.vue"),
+    },
   ],
 });
 

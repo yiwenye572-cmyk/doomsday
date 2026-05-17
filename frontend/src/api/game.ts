@@ -176,3 +176,57 @@ export async function getItemStory(
   };
 }
 
+// ─── Layout Recommendation API ────────────────────────────────────────────
+
+export interface RecommendedItem {
+  id: string;
+  type: string;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  rotation: number;
+}
+
+export interface LayoutRecommendation {
+  recommendationId: string;
+  sessionId: string;
+  items: RecommendedItem[];
+  reason: string;
+  confidence: number;
+  status: "READY" | "ACCEPTED" | "REJECTED";
+}
+
+/** 生成布局推荐（GET） */
+export async function getRecommendation(sessionId: string): Promise<LayoutRecommendation> {
+  const response = await http.get<ApiResponse<LayoutRecommendation>>(
+    `/game/sessions/${sessionId}/cabin/recommendation`,
+  );
+  return response.data.data;
+}
+
+/** 接受推荐，应用到小屋状态（POST accept） */
+export async function acceptRecommendation(
+  sessionId: string,
+  recommendationId: string,
+  expectedVersion: number,
+): Promise<{ newVersion: number; stateData: string; conflict: boolean; conflictMessage?: string }> {
+  const response = await http.post(
+    `/game/sessions/${sessionId}/cabin/recommendation/${recommendationId}/accept`,
+    { expectedVersion },
+    { validateStatus: (s) => s < 500 },
+  );
+  return (response.data as ApiResponse<any>).data;
+}
+
+/** 拒绝推荐（POST reject） */
+export async function rejectRecommendation(
+  sessionId: string,
+  recommendationId: string,
+): Promise<void> {
+  await http.post(
+    `/game/sessions/${sessionId}/cabin/recommendation/${recommendationId}/reject`,
+    {},
+  );
+}
+

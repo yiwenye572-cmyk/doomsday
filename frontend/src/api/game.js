@@ -82,4 +82,18 @@ export async function getItemStory(sessionId, itemId, itemType, itemMetadata) {
         data: response.data.data,
     };
 }
+/** 生成布局推荐（GET） */
+export async function getRecommendation(sessionId) {
+    const response = await http.get(`/game/sessions/${sessionId}/cabin/recommendation`);
+    return response.data.data;
+}
+/** 接受推荐，应用到小屋状态（POST accept） */
+export async function acceptRecommendation(sessionId, recommendationId, expectedVersion) {
+    const response = await http.post(`/game/sessions/${sessionId}/cabin/recommendation/${recommendationId}/accept`, { expectedVersion }, { validateStatus: (s) => s < 500 });
+    return response.data.data;
+}
+/** 拒绝推荐（POST reject） */
+export async function rejectRecommendation(sessionId, recommendationId) {
+    await http.post(`/game/sessions/${sessionId}/cabin/recommendation/${recommendationId}/reject`, {});
+}
 //# sourceMappingURL=game.js.map
