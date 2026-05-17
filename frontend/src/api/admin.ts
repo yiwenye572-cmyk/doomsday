@@ -54,6 +54,9 @@ export interface TraceMetricsSnapshot {
   conflictRate: number;
   eventHitRate: number;
   eventPrecision: number;
+  avgVectorSimilarity: number;
+  cacheHitRate: number;
+  hallucinationRate: number;
 }
 
 export interface TraceMetricsComparison {

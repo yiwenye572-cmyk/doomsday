@@ -65,6 +65,8 @@ public class RetrievalAgent implements AgentHandler {
     @Override
     public void handle(TurnContext ctx, AgentChain next) {
         List<Document> docs = List.of();
+        double vectorSimilarityMean = 0.0;
+        int vectorRetrievedCount = 0;
 
         // --- 1. 语义向量检索（Spring AI VectorStore）---
         try {
@@ -75,6 +77,11 @@ public class RetrievalAgent implements AgentHandler {
                     .similarityThreshold(SIMILARITY_THRESHOLD)
                     .build()
             ));
+            vectorRetrievedCount = docs.size();
+            vectorSimilarityMean = docs.stream()
+                    .mapToDouble(this::extractVectorScore)
+                    .average()
+                    .orElse(0.0);
             docs.forEach(doc -> {
                 String source = (String) doc.getMetadata().getOrDefault("source", "vector");
                 double score = extractVectorScore(doc);
@@ -83,6 +90,9 @@ public class RetrievalAgent implements AgentHandler {
         } catch (Exception e) {
             log.warn("[{}] traceId={} vector search failed: {}", name(), ctx.traceId, e.getMessage());
         }
+
+        ctx.extras.put("rag.vectorSimilarityMean", vectorSimilarityMean);
+        ctx.extras.put("rag.vectorRetrievedCount", vectorRetrievedCount);
 
         // --- 2. JPA 事件卡（位置标签精确匹配）---
         String location = ctx.session.getLocation();

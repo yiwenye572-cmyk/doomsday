@@ -1,5 +1,6 @@
 package com.doomsday.game.domain;
 
+import com.doomsday.game.admin.CacheMetricsStore;
 import com.doomsday.game.api.SubmitTurnResponse;
 import com.doomsday.game.diary.SessionIndexProvider;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -32,10 +33,12 @@ public class SessionRepository implements SessionIndexProvider {
 
     private final StringRedisTemplate redis;
     private final ObjectMapper objectMapper;
+    private final CacheMetricsStore cacheMetricsStore;
 
-    public SessionRepository(StringRedisTemplate redis, ObjectMapper objectMapper) {
+    public SessionRepository(StringRedisTemplate redis, ObjectMapper objectMapper, CacheMetricsStore cacheMetricsStore) {
         this.redis = redis;
         this.objectMapper = objectMapper;
+        this.cacheMetricsStore = cacheMetricsStore;
     }
 
     // ===== 会话 CRUD =====
@@ -55,7 +58,11 @@ public class SessionRepository implements SessionIndexProvider {
     public GameSession findById(String sessionId) {
         String key = SESSION_PREFIX + sessionId;
         String json = redis.opsForValue().get(key);
-        if (json == null) return null;
+        if (json == null) {
+            cacheMetricsStore.recordMiss("session");
+            return null;
+        }
+        cacheMetricsStore.recordHit("session");
         try {
             return objectMapper.readValue(json, GameSession.class);
         } catch (Exception e) {
@@ -78,7 +85,11 @@ public class SessionRepository implements SessionIndexProvider {
     public SubmitTurnResponse findIdempotent(String idemKey) {
         String key = IDEM_PREFIX + idemKey;
         String json = redis.opsForValue().get(key);
-        if (json == null) return null;
+        if (json == null) {
+            cacheMetricsStore.recordMiss("idempotent");
+            return null;
+        }
+        cacheMetricsStore.recordHit("idempotent");
         try {
             return objectMapper.readValue(json, SubmitTurnResponse.class);
         } catch (Exception e) {
@@ -105,8 +116,10 @@ public class SessionRepository implements SessionIndexProvider {
         long n = Math.max(1, topN);
         List<String> raw = redis.opsForList().range(key, -n, -1);
         if (raw == null || raw.isEmpty()) {
+            cacheMetricsStore.recordMiss("memory_l0");
             return List.of();
         }
+        cacheMetricsStore.recordHit("memory_l0");
 
         List<TurnMemory> parsed = new ArrayList<>(raw.size());
         for (String json : raw) {
@@ -136,8 +149,10 @@ public class SessionRepository implements SessionIndexProvider {
         long n = Math.max(1, topN);
         List<String> rows = redis.opsForList().range(key, -n, -1);
         if (rows == null || rows.isEmpty()) {
+            cacheMetricsStore.recordMiss("memory_l1");
             return List.of();
         }
+        cacheMetricsStore.recordHit("memory_l1");
         return rows.stream().filter(s -> s != null && !s.isBlank()).toList();
     }
 

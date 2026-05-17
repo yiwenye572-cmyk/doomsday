@@ -48,6 +48,10 @@ const kpi = computed(() => {
     toolTotalCalls,
     conflictRate: overview.value?.current?.conflictRate ?? 0,
     eventHitRate: overview.value?.current?.eventHitRate ?? 0,
+    eventPrecision: overview.value?.current?.eventPrecision ?? 0,
+    vectorSimilarity: overview.value?.current?.avgVectorSimilarity ?? 0,
+    cacheHitRate: overview.value?.current?.cacheHitRate ?? 0,
+    hallucinationRate: overview.value?.current?.hallucinationRate ?? 0,
   };
 });
 
@@ -214,6 +218,41 @@ onUnmounted(() => {
           {{ pct(kpi.eventHitRate) }}
         </p>
         <p class="kpi-sub" v-if="overview">前窗 {{ pct(overview.previous.eventHitRate) }} · Δ {{ deltaPct(overview.current.eventHitRate, overview.previous.eventHitRate) }}</p>
+      </div>
+      <div class="kpi-card panel">
+        <p class="kpi-label">RAG 召回准确率</p>
+        <p class="kpi-value" :style="{ color: kpi.eventPrecision < 0.55 ? 'var(--danger)' : kpi.eventPrecision < 0.75 ? '#f5a623' : 'var(--ok)' }">
+          {{ pct(kpi.eventPrecision) }}
+        </p>
+        <p class="kpi-sub">口径：eventPrecision（事件命中 / 事件候选）</p>
+      </div>
+      <div class="kpi-card panel">
+        <p class="kpi-label">RAG 召回率</p>
+        <p class="kpi-value" :style="{ color: kpi.eventHitRate < 0.35 ? 'var(--danger)' : kpi.eventHitRate < 0.55 ? '#f5a623' : 'var(--ok)' }">
+          {{ pct(kpi.eventHitRate) }}
+        </p>
+        <p class="kpi-sub">口径：eventHitRate（事件命中 / 样本）</p>
+      </div>
+      <div class="kpi-card panel">
+        <p class="kpi-label">向量相似度均值</p>
+        <p class="kpi-value" :style="{ color: kpi.vectorSimilarity < 0.55 ? 'var(--danger)' : kpi.vectorSimilarity < 0.7 ? '#f5a623' : 'var(--ok)' }">
+          {{ kpi.vectorSimilarity.toFixed(3) }}
+        </p>
+        <p class="kpi-sub">由 RetrievalAgent 写入 trace extras</p>
+      </div>
+      <div class="kpi-card panel">
+        <p class="kpi-label">Redis 缓存命中率</p>
+        <p class="kpi-value" :style="{ color: kpi.cacheHitRate < 0.7 ? 'var(--danger)' : kpi.cacheHitRate < 0.85 ? '#f5a623' : 'var(--ok)' }">
+          {{ pct(kpi.cacheHitRate) }}
+        </p>
+        <p class="kpi-sub">session / memory / idempotent 聚合命中率</p>
+      </div>
+      <div class="kpi-card panel">
+        <p class="kpi-label">RAG 幻觉率</p>
+        <p class="kpi-value" :style="{ color: kpi.hallucinationRate > 0.1 ? 'var(--danger)' : kpi.hallucinationRate > 0.05 ? '#f5a623' : 'var(--ok)' }">
+          {{ pct(kpi.hallucinationRate) }}
+        </p>
+        <p class="kpi-sub">口径：conflictDetected 代理值</p>
       </div>
     </section>
 

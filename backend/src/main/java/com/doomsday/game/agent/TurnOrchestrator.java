@@ -357,7 +357,9 @@ public class TurnOrchestrator {
                     resolveConflictDetected(ctx),
                     eventHitCount > 0,
                     eventHitCount,
-                    eventCandidateCount
+                    eventCandidateCount,
+                    extractDouble(ctx.extras.get("rag.vectorSimilarityMean")),
+                    extractInt(ctx.extras.get("rag.vectorRetrievedCount"))
             );
             metricsStore.saveTrace(trace);
         } catch (Exception e) {
@@ -440,5 +442,19 @@ public class TurnOrchestrator {
                 .filter(Objects::nonNull)
                 .filter(item -> "event_card".equalsIgnoreCase(item.source()))
                 .count();
+    }
+
+    private double extractDouble(Object value) {
+        if (value instanceof Number n) {
+            return n.doubleValue();
+        }
+        return 0.0;
+    }
+
+    private int extractInt(Object value) {
+        if (value instanceof Number n) {
+            return n.intValue();
+        }
+        return 0;
     }
 }

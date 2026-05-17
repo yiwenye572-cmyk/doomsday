@@ -33,10 +33,12 @@ public class AgentMetricsStore {
 
     private final StringRedisTemplate redis;
     private final ObjectMapper objectMapper;
+    private final CacheMetricsStore cacheMetricsStore;
 
-    public AgentMetricsStore(StringRedisTemplate redis, ObjectMapper objectMapper) {
+    public AgentMetricsStore(StringRedisTemplate redis, ObjectMapper objectMapper, CacheMetricsStore cacheMetricsStore) {
         this.redis = redis;
         this.objectMapper = objectMapper;
+        this.cacheMetricsStore = cacheMetricsStore;
     }
 
     /** 记录单个 Agent 调用结果（包含阶段耗时与 token）。 */
@@ -183,7 +185,7 @@ public class AgentMetricsStore {
 
     private TraceMetricsSnapshot buildSnapshot(List<TraceDetail> traces) {
         if (traces == null || traces.isEmpty()) {
-            return new TraceMetricsSnapshot(0, 0, 0, 0, 0, 0, 0, 0);
+            return new TraceMetricsSnapshot(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
         }
 
         int total = traces.size();
@@ -198,6 +200,12 @@ public class AgentMetricsStore {
         double avgElapsed = traces.stream().mapToLong(TraceDetail::elapsedMs).average().orElse(0);
         long conflictCount = traces.stream().filter(t -> Boolean.TRUE.equals(t.conflictDetected())).count();
         long eventHitCount = traces.stream().filter(t -> Boolean.TRUE.equals(t.eventHit())).count();
+        double avgVectorSimilarity = traces.stream()
+            .map(TraceDetail::ragVectorSimilarityMean)
+            .filter(v -> v != null)
+            .mapToDouble(Double::doubleValue)
+            .average()
+            .orElse(0.0);
         double avgEventHit = traces.stream()
                 .map(TraceDetail::eventHitCount)
                 .filter(v -> v != null)
@@ -210,6 +218,8 @@ public class AgentMetricsStore {
                 .mapToInt(Integer::intValue)
                 .average()
                 .orElse(0);
+        double hallucinationRate = total > 0 ? (double) conflictCount / total : 0;
+        double cacheHitRate = cacheMetricsStore.getSnapshot().hitRate();
 
         return new TraceMetricsSnapshot(
                 total,
@@ -219,7 +229,10 @@ public class AgentMetricsStore {
                 p95,
                 total > 0 ? (double) conflictCount / total : 0,
                 total > 0 ? (double) eventHitCount / total : 0,
-                avgEventCandidates > 0 ? Math.min(1.0, avgEventHit / avgEventCandidates) : 0
+            avgEventCandidates > 0 ? Math.min(1.0, avgEventHit / avgEventCandidates) : 0,
+            avgVectorSimilarity,
+            cacheHitRate,
+            hallucinationRate
         );
     }
 
@@ -257,7 +270,9 @@ public class AgentMetricsStore {
             Boolean conflictDetected,
             Boolean eventHit,
             Integer eventHitCount,
-            Integer eventCandidateCount
+            Integer eventCandidateCount,
+            Double ragVectorSimilarityMean,
+            Integer ragVectorRetrievedCount
     ) {}
 
     public record TraceMetricsSnapshot(
@@ -268,7 +283,10 @@ public class AgentMetricsStore {
             long p95ElapsedMs,
             double conflictRate,
             double eventHitRate,
-            double eventPrecision
+            double eventPrecision,
+            double avgVectorSimilarity,
+            double cacheHitRate,
+            double hallucinationRate
     ) {}
 
     public record TraceMetricsComparison(

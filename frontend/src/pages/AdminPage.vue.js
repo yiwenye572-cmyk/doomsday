@@ -41,6 +41,10 @@ const kpi = computed(() => {
         toolTotalCalls,
         conflictRate: overview.value?.current?.conflictRate ?? 0,
         eventHitRate: overview.value?.current?.eventHitRate ?? 0,
+        eventPrecision: overview.value?.current?.eventPrecision ?? 0,
+        vectorSimilarity: overview.value?.current?.avgVectorSimilarity ?? 0,
+        cacheHitRate: overview.value?.current?.cacheHitRate ?? 0,
+        hallucinationRate: overview.value?.current?.hallucinationRate ?? 0,
     };
 });
 async function refresh() {
@@ -283,6 +287,76 @@ if (__VLS_ctx.overview) {
     (__VLS_ctx.pct(__VLS_ctx.overview.previous.eventHitRate));
     (__VLS_ctx.deltaPct(__VLS_ctx.overview.current.eventHitRate, __VLS_ctx.overview.previous.eventHitRate));
 }
+__VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
+    ...{ class: "kpi-card panel" },
+});
+__VLS_asFunctionalElement(__VLS_intrinsicElements.p, __VLS_intrinsicElements.p)({
+    ...{ class: "kpi-label" },
+});
+__VLS_asFunctionalElement(__VLS_intrinsicElements.p, __VLS_intrinsicElements.p)({
+    ...{ class: "kpi-value" },
+    ...{ style: ({ color: __VLS_ctx.kpi.eventPrecision < 0.55 ? 'var(--danger)' : __VLS_ctx.kpi.eventPrecision < 0.75 ? '#f5a623' : 'var(--ok)' }) },
+});
+(__VLS_ctx.pct(__VLS_ctx.kpi.eventPrecision));
+__VLS_asFunctionalElement(__VLS_intrinsicElements.p, __VLS_intrinsicElements.p)({
+    ...{ class: "kpi-sub" },
+});
+__VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
+    ...{ class: "kpi-card panel" },
+});
+__VLS_asFunctionalElement(__VLS_intrinsicElements.p, __VLS_intrinsicElements.p)({
+    ...{ class: "kpi-label" },
+});
+__VLS_asFunctionalElement(__VLS_intrinsicElements.p, __VLS_intrinsicElements.p)({
+    ...{ class: "kpi-value" },
+    ...{ style: ({ color: __VLS_ctx.kpi.eventHitRate < 0.35 ? 'var(--danger)' : __VLS_ctx.kpi.eventHitRate < 0.55 ? '#f5a623' : 'var(--ok)' }) },
+});
+(__VLS_ctx.pct(__VLS_ctx.kpi.eventHitRate));
+__VLS_asFunctionalElement(__VLS_intrinsicElements.p, __VLS_intrinsicElements.p)({
+    ...{ class: "kpi-sub" },
+});
+__VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
+    ...{ class: "kpi-card panel" },
+});
+__VLS_asFunctionalElement(__VLS_intrinsicElements.p, __VLS_intrinsicElements.p)({
+    ...{ class: "kpi-label" },
+});
+__VLS_asFunctionalElement(__VLS_intrinsicElements.p, __VLS_intrinsicElements.p)({
+    ...{ class: "kpi-value" },
+    ...{ style: ({ color: __VLS_ctx.kpi.vectorSimilarity < 0.55 ? 'var(--danger)' : __VLS_ctx.kpi.vectorSimilarity < 0.7 ? '#f5a623' : 'var(--ok)' }) },
+});
+(__VLS_ctx.kpi.vectorSimilarity.toFixed(3));
+__VLS_asFunctionalElement(__VLS_intrinsicElements.p, __VLS_intrinsicElements.p)({
+    ...{ class: "kpi-sub" },
+});
+__VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
+    ...{ class: "kpi-card panel" },
+});
+__VLS_asFunctionalElement(__VLS_intrinsicElements.p, __VLS_intrinsicElements.p)({
+    ...{ class: "kpi-label" },
+});
+__VLS_asFunctionalElement(__VLS_intrinsicElements.p, __VLS_intrinsicElements.p)({
+    ...{ class: "kpi-value" },
+    ...{ style: ({ color: __VLS_ctx.kpi.cacheHitRate < 0.7 ? 'var(--danger)' : __VLS_ctx.kpi.cacheHitRate < 0.85 ? '#f5a623' : 'var(--ok)' }) },
+});
+(__VLS_ctx.pct(__VLS_ctx.kpi.cacheHitRate));
+__VLS_asFunctionalElement(__VLS_intrinsicElements.p, __VLS_intrinsicElements.p)({
+    ...{ class: "kpi-sub" },
+});
+__VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
+    ...{ class: "kpi-card panel" },
+});
+__VLS_asFunctionalElement(__VLS_intrinsicElements.p, __VLS_intrinsicElements.p)({
+    ...{ class: "kpi-label" },
+});
+__VLS_asFunctionalElement(__VLS_intrinsicElements.p, __VLS_intrinsicElements.p)({
+    ...{ class: "kpi-value" },
+    ...{ style: ({ color: __VLS_ctx.kpi.hallucinationRate > 0.1 ? 'var(--danger)' : __VLS_ctx.kpi.hallucinationRate > 0.05 ? '#f5a623' : 'var(--ok)' }) },
+});
+(__VLS_ctx.pct(__VLS_ctx.kpi.hallucinationRate));
+__VLS_asFunctionalElement(__VLS_intrinsicElements.p, __VLS_intrinsicElements.p)({
+    ...{ class: "kpi-sub" },
+});
 __VLS_asFunctionalElement(__VLS_intrinsicElements.section, __VLS_intrinsicElements.section)({
     ...{ class: "panel section-box" },
 });
@@ -715,6 +789,31 @@ if (__VLS_ctx.diaryResult) {
 /** @type {__VLS_StyleScopedClasses['panel']} */ ;
 /** @type {__VLS_StyleScopedClasses['kpi-label']} */ ;
 /** @type {__VLS_StyleScopedClasses['kpi-value']} */ ;
+/** @type {__VLS_StyleScopedClasses['kpi-card']} */ ;
+/** @type {__VLS_StyleScopedClasses['panel']} */ ;
+/** @type {__VLS_StyleScopedClasses['kpi-label']} */ ;
+/** @type {__VLS_StyleScopedClasses['kpi-value']} */ ;
+/** @type {__VLS_StyleScopedClasses['kpi-sub']} */ ;
+/** @type {__VLS_StyleScopedClasses['kpi-card']} */ ;
+/** @type {__VLS_StyleScopedClasses['panel']} */ ;
+/** @type {__VLS_StyleScopedClasses['kpi-label']} */ ;
+/** @type {__VLS_StyleScopedClasses['kpi-value']} */ ;
+/** @type {__VLS_StyleScopedClasses['kpi-sub']} */ ;
+/** @type {__VLS_StyleScopedClasses['kpi-card']} */ ;
+/** @type {__VLS_StyleScopedClasses['panel']} */ ;
+/** @type {__VLS_StyleScopedClasses['kpi-label']} */ ;
+/** @type {__VLS_StyleScopedClasses['kpi-value']} */ ;
+/** @type {__VLS_StyleScopedClasses['kpi-sub']} */ ;
+/** @type {__VLS_StyleScopedClasses['kpi-card']} */ ;
+/** @type {__VLS_StyleScopedClasses['panel']} */ ;
+/** @type {__VLS_StyleScopedClasses['kpi-label']} */ ;
+/** @type {__VLS_StyleScopedClasses['kpi-value']} */ ;
+/** @type {__VLS_StyleScopedClasses['kpi-sub']} */ ;
+/** @type {__VLS_StyleScopedClasses['kpi-card']} */ ;
+/** @type {__VLS_StyleScopedClasses['panel']} */ ;
+/** @type {__VLS_StyleScopedClasses['kpi-label']} */ ;
+/** @type {__VLS_StyleScopedClasses['kpi-value']} */ ;
+/** @type {__VLS_StyleScopedClasses['kpi-sub']} */ ;
 /** @type {__VLS_StyleScopedClasses['kpi-card']} */ ;
 /** @type {__VLS_StyleScopedClasses['panel']} */ ;
 /** @type {__VLS_StyleScopedClasses['kpi-label']} */ ;
