@@ -31,9 +31,9 @@ async function doRest() {
   if (!props.state) return;
   isResting.value = true;
   try {
-    const resp = await restCabin(props.state.sessionId, 1, "afternoon");
-    const apiPayload = (resp.data as any).data;
-    updated.value = { stamina: apiPayload.updatedStamina, time: apiPayload.updatedTimeOfDay };
+    // restCabin 现在直接返回解包后的数据对象
+    const data = await restCabin(props.state.sessionId, 1, "afternoon");
+    updated.value = { stamina: data.updatedStamina, time: data.updatedTimeOfDay };
   } catch (e) {
     console.error("rest failed", e);
   } finally {

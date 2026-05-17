@@ -13,6 +13,10 @@ public class CabinEntity {
     @Column(nullable = false, unique = true)
     private String sessionId;
 
+    /** 乐观锁版本号，Redis Lua CAS 与数据库均依赖此字段 */
+    @Column(nullable = false)
+    private long version = 0L;
+
     @Lob
     private String stateData;
 
@@ -29,6 +33,14 @@ public class CabinEntity {
 
     public void setId(Long id) {
         this.id = id;
+    }
+
+    public long getVersion() {
+        return version;
+    }
+
+    public void setVersion(long version) {
+        this.version = version;
     }
 
     public String getSessionId() {

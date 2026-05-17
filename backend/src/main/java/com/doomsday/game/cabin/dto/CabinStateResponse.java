@@ -3,28 +3,31 @@ package com.doomsday.game.cabin.dto;
 public class CabinStateResponse {
 
     private String sessionId;
+    private long version;
     private String stateData;
+    private int playerStamina;
+    private String timeOfDay;
 
-    public CabinStateResponse(String sessionId, String stateData) {
+    public CabinStateResponse(String sessionId, long version, String stateData, int playerStamina, String timeOfDay) {
         this.sessionId = sessionId;
+        this.version = version;
         this.stateData = stateData;
+        this.playerStamina = playerStamina;
+        this.timeOfDay = timeOfDay;
     }
 
-    // Getters and Setters
+    public String getSessionId() { return sessionId; }
+    public void setSessionId(String sessionId) { this.sessionId = sessionId; }
 
-    public String getSessionId() {
-        return sessionId;
-    }
+    public long getVersion() { return version; }
+    public void setVersion(long version) { this.version = version; }
 
-    public void setSessionId(String sessionId) {
-        this.sessionId = sessionId;
-    }
+    public String getStateData() { return stateData; }
+    public void setStateData(String stateData) { this.stateData = stateData; }
 
-    public String getStateData() {
-        return stateData;
-    }
+    public int getPlayerStamina() { return playerStamina; }
+    public void setPlayerStamina(int playerStamina) { this.playerStamina = playerStamina; }
 
-    public void setStateData(String stateData) {
-        this.stateData = stateData;
-    }
+    public String getTimeOfDay() { return timeOfDay; }
+    public void setTimeOfDay(String timeOfDay) { this.timeOfDay = timeOfDay; }
 }

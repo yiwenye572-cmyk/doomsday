@@ -1,4 +1,5 @@
-import { computed } from "vue";
+import { computed, ref } from "vue";
+import { restCabin } from "../../api/game";
 const props = defineProps();
 const challengePct = computed(() => {
     if (!props.state) {
@@ -6,6 +7,34 @@ const challengePct = computed(() => {
     }
     return Math.max(0, Math.min(100, Math.round(props.state.challengeIndex * 100)));
 });
+const isResting = ref(false);
+const updated = ref(null);
+const displayStamina = computed(() => {
+    if (updated.value)
+        return updated.value.stamina;
+    return props.state ? props.state.stamina : 0;
+});
+const displayTimeLabel = computed(() => {
+    if (updated.value)
+        return updated.value.time;
+    return props.state ? props.state.timePhaseLabel : "-";
+});
+async function doRest() {
+    if (!props.state)
+        return;
+    isResting.value = true;
+    try {
+        // restCabin 现在直接返回解包后的数据对象
+        const data = await restCabin(props.state.sessionId, 1, "afternoon");
+        updated.value = { stamina: data.updatedStamina, time: data.updatedTimeOfDay };
+    }
+    catch (e) {
+        console.error("rest failed", e);
+    }
+    finally {
+        isResting.value = false;
+    }
+}
 debugger; /* PartiallyEnd: #3632/scriptSetup.vue */
 const __VLS_ctx = {};
 let __VLS_components;
@@ -41,7 +70,7 @@ if (__VLS_ctx.state) {
     __VLS_asFunctionalElement(__VLS_intrinsicElements.strong, __VLS_intrinsicElements.strong)({
         ...{ class: "metric-value" },
     });
-    (__VLS_ctx.state.stamina);
+    (__VLS_ctx.displayStamina);
     __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
         ...{ class: "metric-card" },
     });
@@ -83,7 +112,7 @@ if (__VLS_ctx.state) {
     __VLS_asFunctionalElement(__VLS_intrinsicElements.strong, __VLS_intrinsicElements.strong)({
         ...{ class: "metric-value" },
     });
-    (__VLS_ctx.state.timePhaseLabel);
+    (__VLS_ctx.displayTimeLabel);
 }
 if (__VLS_ctx.state) {
     __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
@@ -126,6 +155,24 @@ if (__VLS_ctx.state) {
         (item);
     }
 }
+if (__VLS_ctx.state) {
+    __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
+        ...{ class: "actions" },
+    });
+    __VLS_asFunctionalElement(__VLS_intrinsicElements.button, __VLS_intrinsicElements.button)({
+        ...{ onClick: (__VLS_ctx.doRest) },
+        ...{ class: "btn" },
+        disabled: (__VLS_ctx.isResting),
+    });
+    (__VLS_ctx.isResting ? '休息中...' : '休息 (+1h)');
+    if (__VLS_ctx.updated) {
+        __VLS_asFunctionalElement(__VLS_intrinsicElements.p, __VLS_intrinsicElements.p)({
+            ...{ class: "meta" },
+        });
+        (__VLS_ctx.updated.stamina);
+        (__VLS_ctx.updated.time);
+    }
+}
 else {
     __VLS_asFunctionalElement(__VLS_intrinsicElements.p, __VLS_intrinsicElements.p)({
         ...{ class: "meta" },
@@ -163,12 +210,20 @@ else {
 /** @type {__VLS_StyleScopedClasses['inventory']} */ ;
 /** @type {__VLS_StyleScopedClasses['bag-tags']} */ ;
 /** @type {__VLS_StyleScopedClasses['tag']} */ ;
+/** @type {__VLS_StyleScopedClasses['actions']} */ ;
+/** @type {__VLS_StyleScopedClasses['btn']} */ ;
+/** @type {__VLS_StyleScopedClasses['meta']} */ ;
 /** @type {__VLS_StyleScopedClasses['meta']} */ ;
 var __VLS_dollars;
 const __VLS_self = (await import('vue')).defineComponent({
     setup() {
         return {
             challengePct: challengePct,
+            isResting: isResting,
+            updated: updated,
+            displayStamina: displayStamina,
+            displayTimeLabel: displayTimeLabel,
+            doRest: doRest,
         };
     },
     __typeProps: {},

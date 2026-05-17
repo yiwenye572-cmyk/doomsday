@@ -36,6 +36,11 @@ spring:
 
   # ===== Spring AI Alibaba (DashScope) =====
   ai:
+    retry:
+      # 减少重试次数，避免多次超时累计导致请求超时（agent 层已有 fallback）
+      max-attempts: 1
+      initial-interval: 1s
+      max-interval: 5s
     dashscope:
       # 从环境变量注入；本地开发可在 .env 或 IDE Run Config 中设置 DASHSCOPE_API_KEY=sk-xxx
       api-key: ${DASHSCOPE_API_KEY:not-configured}
@@ -48,8 +53,7 @@ spring:
           max-tokens: 1024
       embedding:
         options:
-          # 向量模型，1536 维 与 V1/V3 migration schema 对齐
-          # ⚠️ 待确认：可替换为 text-embedding-v4（需同步修改 dimensions）
+          # 向量模型，text-embedding-v3 默认输出 1024 维，与 V1/V3/V4 migration schema 对齐
           model: text-embedding-v3
 
     # ===== PgVector Store (RAG) =====
@@ -59,8 +63,36 @@ spring:
         initialize-schema: false
         schema-name: public
         table-name: vector_store
-        # 必须与 V3 migration 的 VECTOR(1536) 维度一致
-        dimensions: 1536
+        # 必须与 V4 migration 修正后的 VECTOR(1024) 维度一致（text-embedding-v3 默认 1024 维）
+        dimensions: 1024
         distance-type: COSINE_DISTANCE
         index-type: IVFFLAT
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  endpoint:
+    health:
+      show-details: always
+
+game:
+  chaos:
+    enabled: false
+  tool:
+    max-retries: 1
+  diary:
+    summary:
+      every-turns: 3
+      scheduler-enabled: true
+      fixed-delay-ms: 60000
+      sweep-limit: 50
+  media:
+    image:
+      timeout-ms: 3000
+      dashscope-model: wanx2.1-t2i-turbo
+    pexels:
+      api-key: ${PEXELS_API_KEY:not-configured}
+      base-url: https://api.pexels.com/v1
 
