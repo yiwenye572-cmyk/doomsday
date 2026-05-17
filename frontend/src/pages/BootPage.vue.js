@@ -84,6 +84,7 @@ let __VLS_directives;
 /** @type {__VLS_StyleScopedClasses['difficulty-card']} */ ;
 /** @type {__VLS_StyleScopedClasses['difficulty-card']} */ ;
 /** @type {__VLS_StyleScopedClasses['difficulty-card']} */ ;
+/** @type {__VLS_StyleScopedClasses['btn--cabin']} */ ;
 /** @type {__VLS_StyleScopedClasses['boot-page']} */ ;
 // CSS variable injection 
 // CSS variable injection end 
@@ -146,6 +147,12 @@ __VLS_asFunctionalElement(__VLS_intrinsicElements.button, __VLS_intrinsicElement
     ...{ onClick: (__VLS_ctx.goWorldFactory) },
     ...{ class: "btn" },
 });
+__VLS_asFunctionalElement(__VLS_intrinsicElements.button, __VLS_intrinsicElements.button)({
+    ...{ onClick: (...[$event]) => {
+            __VLS_ctx.router.push('/cabin');
+        } },
+    ...{ class: "btn btn--cabin" },
+});
 if (__VLS_ctx.resumeSessionId) {
     __VLS_asFunctionalElement(__VLS_intrinsicElements.button, __VLS_intrinsicElements.button)({
         ...{ onClick: (__VLS_ctx.resumeGame) },
@@ -181,6 +188,8 @@ if (__VLS_ctx.error) {
 /** @type {__VLS_StyleScopedClasses['actions']} */ ;
 /** @type {__VLS_StyleScopedClasses['btn']} */ ;
 /** @type {__VLS_StyleScopedClasses['btn']} */ ;
+/** @type {__VLS_StyleScopedClasses['btn--cabin']} */ ;
+/** @type {__VLS_StyleScopedClasses['btn']} */ ;
 /** @type {__VLS_StyleScopedClasses['btn']} */ ;
 /** @type {__VLS_StyleScopedClasses['btn--accent']} */ ;
 /** @type {__VLS_StyleScopedClasses['error']} */ ;
@@ -188,6 +197,7 @@ var __VLS_dollars;
 const __VLS_self = (await import('vue')).defineComponent({
     setup() {
         return {
+            router: router,
             loading: loading,
             error: error,
             resumeSessionId: resumeSessionId,

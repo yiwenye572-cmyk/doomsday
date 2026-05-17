@@ -96,4 +96,17 @@ export async function acceptRecommendation(sessionId, recommendationId, expected
 export async function rejectRecommendation(sessionId, recommendationId) {
     await http.post(`/game/sessions/${sessionId}/cabin/recommendation/${recommendationId}/reject`, {});
 }
+/** 提交文生图任务；type: "cabin_bg" | "item" */
+export async function submitImageGen(prompt, type = "cabin_bg") {
+    const response = await http.post("/game/image/generate", {
+        prompt,
+        type,
+    });
+    return response.data.data;
+}
+/** 轮询图片生成任务状态 */
+export async function queryImageGen(taskId) {
+    const response = await http.get(`/game/image/task/${taskId}`);
+    return response.data.data;
+}
 //# sourceMappingURL=game.js.map

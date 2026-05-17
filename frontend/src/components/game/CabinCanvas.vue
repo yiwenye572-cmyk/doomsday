@@ -49,8 +49,8 @@ const props = withDefaults(defineProps<{
 });
 
 const emit = defineEmits<{
-  (e: 'change', items: CabinItem[]): void;
-  (e: 'select', item: CabinItem | null): void;
+  change: [items: CabinItem[]];
+  select: [item: CabinItem | null];
 }>();
 
 const canvas = ref<HTMLCanvasElement | null>(null);

@@ -230,3 +230,29 @@ export async function rejectRecommendation(
   );
 }
 
+// ─── Image Generation API (wanx-v1) ──────────────────────────────────────
+
+export interface ImageGenResult {
+  taskId: string;
+  status: "PENDING" | "RUNNING" | "SUCCEEDED" | "FAILED";
+  imageUrl: string | null;
+  message: string | null;
+}
+
+/** 提交文生图任务；type: "cabin_bg" | "item" */
+export async function submitImageGen(
+  prompt: string,
+  type: "cabin_bg" | "item" = "cabin_bg",
+): Promise<ImageGenResult> {
+  const response = await http.post<ApiResponse<ImageGenResult>>("/game/image/generate", {
+    prompt,
+    type,
+  });
+  return response.data.data;
+}
+
+/** 轮询图片生成任务状态 */
+export async function queryImageGen(taskId: string): Promise<ImageGenResult> {
+  const response = await http.get<ApiResponse<ImageGenResult>>(`/game/image/task/${taskId}`);
+  return response.data.data;
+}
