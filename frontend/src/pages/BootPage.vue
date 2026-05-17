@@ -122,6 +122,7 @@ async function startGame() {
 
       <div class="actions">
         <button class="btn" @click="goWorldFactory">世界工厂</button>
+        <button class="btn btn--cabin" @click="router.push('/cabin')">🏠 小屋模块</button>
         <button v-if="resumeSessionId" class="btn" @click="resumeGame">继续上次会话</button>
         <button class="btn btn--accent" @click="startGame" :disabled="loading">
           {{ loading ? "创建中..." : "进入游戏" }}
@@ -224,7 +225,18 @@ h2 {
 .actions {
   margin-top: 18px;
   display: flex;
+  gap: 8px;
   justify-content: flex-end;
+  flex-wrap: wrap;
+}
+
+.btn--cabin {
+  border-color: rgba(100, 200, 150, 0.5);
+  color: #7de8b0;
+}
+.btn--cabin:hover {
+  background: rgba(100, 200, 150, 0.12);
+  border-color: rgba(100, 200, 150, 0.8);
 }
 
 .error {

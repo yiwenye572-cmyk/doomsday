@@ -14,7 +14,19 @@
     <div class="main-layout">
       <!-- 左：画布 -->
       <div class="canvas-area">
-        <CabinCanvas :width="640" :height="480" :initialItems="canvasItems" ref="canvasRef" />
+        <CabinCanvas
+          :width="640"
+          :height="480"
+          :initialItems="canvasItems"
+          :bgImage="cabinBgImage"
+          :showGrid="showGrid"
+          ref="canvasRef"
+        />
+        <div class="canvas-toolbar">
+          <label class="grid-toggle">
+            <input type="checkbox" v-model="showGrid" /> 显示网格
+          </label>
+        </div>
       </div>
 
       <!-- 右：物品托盘 + 检查器 -->
@@ -48,15 +60,19 @@ const sessionId      = ref("demo-session-001");
 const currentVersion = ref(0);
 const statusMsg      = ref<string | null>(null);
 const canvasRef      = ref<InstanceType<typeof CabinCanvas> | null>(null);
+const showGrid       = ref(true);
+
+// 背景图：放置于 public/assets/cabin-bg.jpg（AI 生成后替换）
+const cabinBgImage = ref('/assets/cabin-bg.jpg');
 
 const canvasItems = ref<CabinItem[]>([]);
 
 const trayItems = ref<TrayItem[]>([
-  { id: "item-bed-01",    name: "床",     type: "bed",    image: "/assets/bed.png",    x: 0, y: 0 },
-  { id: "item-table-01",  name: "桌子",   type: "table",  image: "/assets/table.png",  x: 0, y: 0 },
-  { id: "item-axe-01",    name: "斧头",   type: "axe",    image: "/assets/axe.png",    x: 0, y: 0 },
-  { id: "item-medkit-01", name: "医疗包", type: "medkit", image: "/assets/medkit.png", x: 0, y: 0 },
-  { id: "item-window-01", name: "窗户",   type: "window", image: "/assets/window.png", x: 0, y: 0 },
+  { id: "item-bed-01",    name: "床",     type: "bed",    image: "/assets/items/bed.png",    x: 0, y: 0 },
+  { id: "item-table-01",  name: "桌子",   type: "table",  image: "/assets/items/table.png",  x: 0, y: 0 },
+  { id: "item-axe-01",    name: "斧头",   type: "axe",    image: "/assets/items/axe.png",    x: 0, y: 0 },
+  { id: "item-medkit-01", name: "医疗包", type: "medkit", image: "/assets/items/medkit.png", x: 0, y: 0 },
+  { id: "item-window-01", name: "窗户",   type: "window", image: "/assets/items/window.png", x: 0, y: 0 },
 ]);
 
 const selectedItem = ref<TrayItem | null>(null);
@@ -121,6 +137,23 @@ h1 { color: #e0c97f; margin: 0 0 16px; font-size: 20px; letter-spacing: 1px; }
 }
 
 .canvas-area { flex: 1; }
+
+.canvas-toolbar {
+  margin-top: 6px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.grid-toggle {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  color: #888;
+  cursor: pointer;
+  user-select: none;
+}
 
 .side-panel {
   width: 220px;

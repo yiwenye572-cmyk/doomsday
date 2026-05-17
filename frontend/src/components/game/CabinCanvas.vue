@@ -29,6 +29,7 @@ export interface CabinItem {
   h: number;
   rotation: number;
   color?: string;
+  image?: string;   // 物品图片 URL（可选，无则降级纯色矩形）
 }
 
 const props = withDefaults(defineProps<{
@@ -36,11 +37,15 @@ const props = withDefaults(defineProps<{
   height?: number;
   gridSize?: number;
   initialItems?: CabinItem[];
+  bgImage?: string;          // 背景图 URL，可选
+  showGrid?: boolean;        // 是否显示网格
 }>(), {
   width: 800,
   height: 600,
   gridSize: 32,
-  initialItems: () => []
+  initialItems: () => [],
+  bgImage: '',
+  showGrid: true,
 });
 
 const emit = defineEmits<{
@@ -50,6 +55,26 @@ const emit = defineEmits<{
 
 const canvas = ref<HTMLCanvasElement | null>(null);
 const wrapRef = ref<HTMLDivElement | null>(null);
+
+// ─── Image cache ────────────────────────────────────────────────────────
+const imgCache = new Map<string, HTMLImageElement>();
+
+function loadImage(src: string): Promise<HTMLImageElement> {
+  if (imgCache.has(src)) return Promise.resolve(imgCache.get(src)!);
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => { imgCache.set(src, img); resolve(img); };
+    img.onerror = () => resolve(img); // fallback: broken img still returned
+    img.src = src;
+  });
+}
+
+async function preloadItemImages() {
+  const srcs = items.value.map(i => i.image).filter(Boolean) as string[];
+  if (props.bgImage) srcs.push(props.bgImage);
+  await Promise.all([...new Set(srcs)].map(loadImage));
+  draw();
+}
 
 const items = ref<CabinItem[]>(props.initialItems.map(i => ({ ...i })));
 const undoStack = ref<CabinItem[][]>([]);
@@ -98,39 +123,75 @@ function draw() {
   const ctx = cvs.getContext('2d')!;
   ctx.clearRect(0, 0, props.width, props.height);
 
-  // Background
-  ctx.fillStyle = '#1a1a2e';
-  ctx.fillRect(0, 0, props.width, props.height);
-
-  // Grid
-  ctx.strokeStyle = 'rgba(255,255,255,0.06)';
-  ctx.lineWidth = 1;
-  for (let x = 0; x < props.width; x += props.gridSize) {
-    ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, props.height); ctx.stroke();
-  }
-  for (let y = 0; y < props.height; y += props.gridSize) {
-    ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(props.width, y); ctx.stroke();
+  // ── Background ─────────────────────────────────────────────────────────
+  const bgImg = props.bgImage ? imgCache.get(props.bgImage) : null;
+  if (bgImg && bgImg.complete && bgImg.naturalWidth > 0) {
+    ctx.drawImage(bgImg, 0, 0, props.width, props.height);
+    // 半透明暗层，让物品更清晰
+    ctx.fillStyle = 'rgba(0,0,0,0.25)';
+    ctx.fillRect(0, 0, props.width, props.height);
+  } else {
+    ctx.fillStyle = '#1a1a2e';
+    ctx.fillRect(0, 0, props.width, props.height);
   }
 
-  // Items
+  // ── Grid ───────────────────────────────────────────────────────────────
+  if (props.showGrid) {
+    ctx.strokeStyle = bgImg ? 'rgba(255,255,255,0.04)' : 'rgba(255,255,255,0.06)';
+    ctx.lineWidth = 1;
+    for (let x = 0; x < props.width; x += props.gridSize) {
+      ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, props.height); ctx.stroke();
+    }
+    for (let y = 0; y < props.height; y += props.gridSize) {
+      ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(props.width, y); ctx.stroke();
+    }
+  }
+
+  // ── Items ──────────────────────────────────────────────────────────────
   for (const item of items.value) {
     const isSelected = selected.value?.id === item.id;
     const isDragging = dragging.value?.id === item.id;
     const inConflict = collisionItem.value === item.id;
 
     ctx.save();
-    ctx.fillStyle = inConflict ? 'rgba(255,80,80,0.5)'
-                  : isDragging ? 'rgba(100,180,255,0.7)'
-                  : (item.color ?? 'rgba(90,140,220,0.8)');
-    ctx.strokeStyle = isSelected ? '#ffe77a' : 'rgba(255,255,255,0.3)';
-    ctx.lineWidth = isSelected ? 2 : 1;
-    ctx.fillRect(item.x, item.y, item.w, item.h);
-    ctx.strokeRect(item.x, item.y, item.w, item.h);
 
-    // Label
-    ctx.fillStyle = '#fff';
-    ctx.font = `${Math.min(12, item.h * 0.4)}px monospace`;
-    ctx.fillText(item.type, item.x + 4, item.y + item.h / 2 + 4);
+    // 旋转支持
+    if (item.rotation) {
+      const cx = item.x + item.w / 2;
+      const cy = item.y + item.h / 2;
+      ctx.translate(cx, cy);
+      ctx.rotate((item.rotation * Math.PI) / 180);
+      ctx.translate(-cx, -cy);
+    }
+
+    const itemImg = item.image ? imgCache.get(item.image) : null;
+    if (itemImg && itemImg.complete && itemImg.naturalWidth > 0) {
+      // 冲突/拖拽时叠加半透明色
+      if (inConflict) { ctx.globalAlpha = 0.5; }
+      else if (isDragging) { ctx.globalAlpha = 0.85; }
+      ctx.drawImage(itemImg, item.x, item.y, item.w, item.h);
+      ctx.globalAlpha = 1;
+    } else {
+      // Fallback: 纯色矩形
+      ctx.fillStyle = inConflict ? 'rgba(255,80,80,0.5)'
+                    : isDragging ? 'rgba(100,180,255,0.7)'
+                    : (item.color ?? 'rgba(90,140,220,0.8)');
+      ctx.fillRect(item.x, item.y, item.w, item.h);
+      // 无图片时显示文字标签
+      ctx.fillStyle = '#fff';
+      ctx.font = `${Math.min(12, item.h * 0.4)}px monospace`;
+      ctx.fillText(item.type, item.x + 4, item.y + item.h / 2 + 4);
+    }
+
+    // 选中高亮框
+    if (isSelected) {
+      ctx.strokeStyle = '#ffe77a';
+      ctx.lineWidth = 2;
+      ctx.setLineDash([4, 3]);
+      ctx.strokeRect(item.x - 1, item.y - 1, item.w + 2, item.h + 2);
+      ctx.setLineDash([]);
+    }
+
     ctx.restore();
   }
 }
@@ -233,15 +294,21 @@ function handleKey(e: KeyboardEvent) {
 }
 
 onMounted(() => {
-  draw();
+  preloadItemImages().then(() => draw());
   window.addEventListener('keydown', handleKey);
 });
 
 // re-draw when props.initialItems changes from parent
 watch(() => props.initialItems, (val) => {
   items.value = val.map(i => ({ ...i }));
-  draw();
+  preloadItemImages().then(() => draw());
 }, { deep: true });
+
+// 背景图切换时重绘
+watch(() => props.bgImage, (src) => {
+  if (src) loadImage(src).then(() => draw());
+  else draw();
+});
 
 defineExpose({ exportJson, importJson, undo });
 </script>
