@@ -17,7 +17,7 @@ public class CabinEntity {
     @Column(nullable = false)
     private long version = 0L;
 
-    @Lob
+    @Column(name = "state_data", columnDefinition = "text")
     private String stateData;
 
     @Column(name = "player_stamina", nullable = false)
